@@ -251,10 +251,10 @@ class coupon extends WeiXinAccount {
 
 	public function isCouponSupported() {
 		global $_W;
-		$we7_coupon_module = pdo_get('modules', array('name' => 'we7_coupon'));
+		load()->model('module');
+		$we7_coupon_module = module_fetch('we7_coupon');
 		$setting = array();
 		if (!empty($we7_coupon_module)) {
-			load()->model('module');
 			$cachekey = "modulesetting:{$_W['uniacid']}:we7_coupon";
 			$setting = (array)cache_load($cachekey, true);
 		} else {
@@ -851,6 +851,9 @@ class Card {
 			'base_info' => $this->getBaseinfo(),
 					);
 		$carddata = array_merge($carddata, $this->getCardExtraData());
+		if (strtolower($this->types[$this->type]) == 'discount') {
+			$carddata['discount'] = 100 - $carddata['discount'];
+		}
 		$card = array(
 			'card' => array(
 				'card_type' => $this->types[$this->type],
