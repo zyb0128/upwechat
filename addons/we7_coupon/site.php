@@ -34,6 +34,14 @@ class We7_couponModuleSite extends WeModuleSite {
 			array(
 				'title' => '我的兑换',
 				'url' => $this->createMobileurl('activity', array('activity_type' => 'goods', 'op' => 'mine'))
+			),
+			array(
+				'title' => '消息',
+				'url' => $this->createMobileurl('card', array('op' => 'notice'))
+			),
+			array(
+				'title' => '签到',
+				'url' => $this->createMobileurl('card', array('op' => 'sign_display'))
 			)
 		);
 		return $urls;
@@ -47,7 +55,11 @@ class We7_couponModuleSite extends WeModuleSite {
 		activity_coupon_type_init();
 		uni_user_permission_check('mc_card_editor');
 		$op = !empty($_GPC['op']) ? $_GPC['op'] : 'editor';
-
+		$unisetting = uni_setting_load('creditnames');
+		if (empty($unisetting['creditnames'])) {
+			$unisetting['credit1'] = array('title' => '积分', 'enabled' => 1);
+			$unisetting['credit2'] = array('title' => '余额', 'enabled' => 1);
+		}
 		if ($op == 'editor') {
 			if (!empty($_GPC['wapeditor'])) {
 				$params = $_GPC['wapeditor']['params'];
@@ -2716,7 +2728,7 @@ class We7_couponModuleSite extends WeModuleSite {
 
 		if($op == 'index') {
 			$clerks = pdo_getall('activity_clerks', array('uniacid' => $_W['uniacid']), array('id', 'name'), 'id');
-			$stores = pdo_getall('activity_stores', array('uniacid' => $_W['uniacid']), array('id', 'business_name', 'branch_name'), 'id');
+			$stores = pdo_getall('activity_stores', array('uniacid' => $_W['uniacid'], 'source' => COUPON_TYPE), array('id', 'business_name', 'branch_name'), 'id');
 			$condition = ' WHERE uniacid = :uniacid AND credittype = :credittype AND createtime >= :starttime AND createtime <= :endtime';
 			$params = array(':uniacid' => $_W['uniacid'], ':credittype' => 'credit1', ':starttime' => $starttime, ':endtime' => $endtime);
 			$num = intval($_GPC['num']);
@@ -2905,7 +2917,7 @@ class We7_couponModuleSite extends WeModuleSite {
 
 		if($op == 'index') {
 			$clerks = pdo_getall('activity_clerks', array('uniacid' => $_W['uniacid']), array('id', 'name'), 'id');
-			$stores = pdo_getall('activity_stores', array('uniacid' => $_W['uniacid']), array('id', 'business_name', 'branch_name'), 'id');
+			$stores = pdo_getall('activity_stores', array('uniacid' => $_W['uniacid'], 'source' => COUPON_TYPE), array('id', 'business_name', 'branch_name'), 'id');
 			$condition = ' WHERE uniacid = :uniacid AND credittype = :credittype AND createtime >= :starttime AND createtime <= :endtime';
 			$params = array(':uniacid' => $_W['uniacid'], ':credittype' => 'credit2', ':starttime' => $starttime, ':endtime' => $endtime);
 			if(intval($_W['user']['clerk_type']) == ACCOUNT_OPERATE_CLERK) {
@@ -3129,7 +3141,7 @@ class We7_couponModuleSite extends WeModuleSite {
 
 		if($op == 'index') {
 			$clerks = pdo_getall('activity_clerks', array('uniacid' => $_W['uniacid']), array('id', 'name'), 'id');
-			$stores = pdo_getall('activity_stores', array('uniacid' => $_W['uniacid']), array('id', 'business_name', 'branch_name'), 'id');
+			$stores = pdo_getall('activity_stores', array('uniacid' => $_W['uniacid'], 'source' => COUPON_TYPE), array('id', 'business_name', 'branch_name'), 'id');
 
 			$condition = ' WHERE uniacid = :uniacid AND createtime >= :starttime AND createtime <= :endtime';
 			$params = array(':uniacid' => $_W['uniacid'], ':starttime' => $starttime, ':endtime' => $endtime);
@@ -3303,7 +3315,7 @@ class We7_couponModuleSite extends WeModuleSite {
 
 		if($op == 'index') {
 			$clerks = pdo_getall('activity_clerks', array('uniacid' => $_W['uniacid']), array('id', 'name'), 'id');
-			$stores = pdo_getall('activity_stores', array('uniacid' => $_W['uniacid']), array('id', 'business_name', 'branch_name'), 'id');
+			$stores = pdo_getall('activity_stores', array('uniacid' => $_W['uniacid'], 'source' => COUPON_TYPE), array('id', 'business_name', 'branch_name'), 'id');
 			$pindex = max(1, intval($_GPC['page']));
 			$psize = 20;
 			$condition = ' WHERE uniacid = :uniacid AND status = 1';
@@ -3560,6 +3572,11 @@ class We7_couponModuleSite extends WeModuleSite {
 						$coupon_title .= "{$grant_coupon['couponTitle']}|";
 					}
 				}
+				$params = json_decode($setting['params'], true);
+				foreach ($params as $key => $value) {
+					$params_new[$value['id']] = $value;  
+				}
+				$basic_info = $params_new['cardBasic'];
 			} else {
 				message('公众号尚未开启会员卡功能', $this->createMobileurl('card'), 'error');
 			}
@@ -3712,8 +3729,10 @@ class We7_couponModuleSite extends WeModuleSite {
 			$notice_count = card_notice_stat();
 
 			$params = json_decode($setting['params'], true);
-			foreach ($params as $key => $value) {
-				$params_new[$value['id']] = $value;  
+			if (!empty($params)) {
+				foreach ($params as $key => $value) {
+					$params_new[$value['id']] = $value;  
+				}
 			}
 			$basic_info = $params_new['cardBasic'];
 			$activity_info = $params_new['cardActivity'];
@@ -4029,10 +4048,12 @@ class We7_couponModuleSite extends WeModuleSite {
 		$colors = activity_coupon_colors();
 		$op = trim($_GPC['op']) ? trim($_GPC['op']) : 'display';
 		$activity_type = trim($_GPC['activity_type']) ? trim($_GPC['activity_type']) : 'coupon';
+		$cachekey = "modulesetting:{$_W['uniacid']}:we7_coupon";
+		$we7_coupon_settings = cache_load($cachekey);
 		if ($activity_type == 'coupon') {
 			//兑换列表
 			if($op == 'display') {
-				if ($unisettings['exchange_enable'] != '1') {
+				if ($we7_coupon_settings['exchange_enable'] != '1') {
 					message('未开启兑换功能');
 				}
 				$user = mc_fetch($_W['member']['uid'], array('groupid'));
@@ -4066,7 +4087,7 @@ class We7_couponModuleSite extends WeModuleSite {
 					}
 					if (!empty($_W['current_module'])) {
 						$coupon_modules = pdo_getall('coupon_modules', array('uniacid' => $_W['uniacid'], 'couponid' => $list['extra']), array(), 'module');
-						if (!empty($coupon_modules) && !in_array($_W['current'], $coupon_modules)) {
+						if (!empty($coupon_modules) && empty($coupon_modules[$_W['current_module']['name']])) {
 							unset($exchange_lists[$list['extra']]);
 							continue;
 						}
@@ -4080,7 +4101,7 @@ class We7_couponModuleSite extends WeModuleSite {
 			}
 			//兑换过程
 			if($op == 'exchange') {
-				if ($unisettings['exchange_enable'] != '1') {
+				if ($we7_coupon_settings['exchange_enable'] != '1') {
 					message(error(-1, '未开启兑换功能'), '', 'ajax');
 				}
 				$id = intval($_GPC['id']);
@@ -4198,7 +4219,7 @@ class We7_couponModuleSite extends WeModuleSite {
 			$profile = mc_fetch($_W['member']['uid']);
 			//真实物品列表
 			if($op == 'display') {
-				if ($unisettings['exchange_enable'] != '1') {
+				if ($we7_coupon_settings['exchange_enable'] != '1') {
 					message('未开启兑换功能');
 				}
 				$lists = pdo_fetchall('SELECT id,title,extra,thumb,type,credittype,endtime,description,credit FROM ' . tablename('activity_exchange') . ' WHERE uniacid = :uniacid AND type = :type AND endtime > :endtime AND status = 1 ORDER BY endtime ASC ', array(':uniacid' => $_W['uniacid'], ':type' => 3, ':endtime' => TIMESTAMP));
@@ -4211,7 +4232,7 @@ class We7_couponModuleSite extends WeModuleSite {
 			}
 			//兑换过程
 			if($op == 'post') {
-				if ($unisettings['exchange_enable'] != '1') {
+				if ($we7_coupon_settings['exchange_enable'] != '1') {
 					message(error(-1, '未开启兑换功能'), '', 'ajax');
 				}
 				$id = intval($_GPC['id']); 
