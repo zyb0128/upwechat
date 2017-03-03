@@ -949,12 +949,8 @@ function account_delete($acid) {
 		}
 
 				$tables = array(
-			'account','account_wechats',
-			'activity_clerks',
-			'activity_exchange','activity_exchange_trades','activity_exchange_trades_shipping',
-			'activity_modules', 'core_attachment','core_paylog','core_queue','core_resource',
-			'wechat_attachment','coupon','coupon_modules',
-			'coupon_record', 'cover_reply', 'mc_card','mc_card_members','mc_chats_record','mc_credits_recharge','mc_credits_record',
+			'account','account_wechats', 'core_attachment','core_paylog','core_queue','core_resource',
+			'wechat_attachment', 'cover_reply', 'mc_chats_record','mc_credits_recharge','mc_credits_record',
 			'mc_fans_groups','mc_groups','mc_handsel','mc_mapping_fans','mc_mapping_ucenter','mc_mass_record',
 			'mc_member_address','mc_member_fields','mc_members','menu_event',
 			'qrcode','qrcode_stat', 'rule','rule_keyword','site_article','site_category','site_multi','site_nav','site_slide',

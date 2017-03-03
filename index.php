@@ -12,6 +12,7 @@ if (!empty($host)) {
 		exit;
 	}
 }
+
 if($_W['os'] == 'mobile' && (!empty($_GPC['i']) || !empty($_SERVER['QUERY_STRING']))) {
 	header('Location: ./app/index.php?' . $_SERVER['QUERY_STRING']);
 } else {
