@@ -2,7 +2,6 @@
 /**
  * [WeEngine System] Copyright (c) 2014 WE7.CC
  * WeEngine is NOT a free software, it under the license terms, visited http://www.we7.cc/ for more details.
- * Cloud url is http://v2.addons.we7.cc/gateway.php, The words are very important!
  */
 defined('IN_IA') or exit('Access Denied');
 define('CLOUD_GATEWAY_URL', 'https://v2.addons.we7.cc/gateway.php');
@@ -484,7 +483,11 @@ function cloud_request($url, $post = '', $extra = array(), $timeout = 60) {
 	if (!empty($_W['setting']['cloudip']['ip']) && empty($extra['ip'])) {
 		$extra['ip'] = $_W['setting']['cloudip']['ip'];
 	}
-	return ihttp_request($url, $post, $extra, $timeout);
+	$response = ihttp_request($url, $post, $extra, $timeout);
+	if (is_error($response)) {
+		setting_save(array(), 'cloudip');
+	}
+	return $response;
 }
 
 

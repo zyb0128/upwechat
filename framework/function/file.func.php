@@ -241,8 +241,8 @@ function file_remote_upload($filename, $auto_delete_local = true) {
 		if ($auto_delete_local) {
 			file_delete($filename);
 		}
+		return true;
 	}elseif ($_W['setting']['remote']['type'] == '3') {
-
 		require_once(IA_ROOT . '/framework/library/qiniu/autoload.php');
 		$auth = new Qiniu\Auth($_W['setting']['remote']['qiniu']['accesskey'],$_W['setting']['remote']['qiniu']['secretkey']);
 		$config = new Qiniu\Config();
@@ -364,11 +364,17 @@ function file_remote_delete($file) {
 		} else {
 			return true;
 		}
-	}  elseif ($_W['setting']['remote']['type'] == '4') {
-		require(IA_ROOT.'/framework/library/cos/include.php');
+	} elseif ($_W['setting']['remote']['type'] == '4') {
 		$bucketName = $_W['setting']['remote']['cos']['bucket'];
 		$path = "/".$file;
-		$result = Qcloud_cos\Cosapi::delFile($bucketName, $path);
+		if (!empty($_W['setting']['remote']['cos']['local'])) {
+			require(IA_ROOT.'/framework/library/cosv4.2/include.php');
+			qcloudcos\Cosapi::setRegion($_W['setting']['remote']['cos']['local']);
+			$result = qcloudcos\Cosapi::delFile($bucketName, $path);
+		} else {
+			require(IA_ROOT.'/framework/library/cos/include.php');
+			$result = Qcloud_cos\Cosapi::delFile($bucketName, $path);
+		}
 		if (!empty($result['code'])) {
 			return error(-1, '删除cos远程文件失败');
 		} else {

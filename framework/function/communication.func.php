@@ -15,8 +15,7 @@ function ihttp_request($url, $post = '', $extra = array(), $timeout = 60) {
 		$urlset['query'] = "?{$urlset['query']}";
 	}
 	if (empty($urlset['port'])) {
-		//$urlset['port'] = $urlset['scheme'] == 'https' ? '443' : '80';
-	}
+			}
 	if (strexists($url, 'https://') && !extension_loaded('openssl')) {
 		if (!extension_loaded("openssl")) {
 			message('请开启您PHP环境的openssl');
