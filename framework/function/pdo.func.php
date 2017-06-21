@@ -110,6 +110,9 @@ function pdo_fieldexists($tablename, $fieldname = '') {
 	return pdo()->fieldexists($tablename, $fieldname);
 }
 
+function pdo_fieldmatch($tablename, $fieldname, $datatype = '', $length = '') {
+	return pdo()->fieldmatch($tablename, $fieldname, $datatype, $length);
+}
 
 function pdo_indexexists($tablename, $indexname = '') {
 	return pdo()->indexexists($tablename, $indexname);

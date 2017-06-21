@@ -15,9 +15,10 @@ $configfile = IA_ROOT . "/data/config.php";
 if(!file_exists($configfile)) {
 	if(file_exists(IA_ROOT . '/install.php')) {
 		header('Content-Type: text/html; charset=utf-8');
+		require IA_ROOT . '/framework/version.inc.php';
 		echo '<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />';
 		echo "·如果你还没安装本程序，请运行<a href='".(strpos($_SERVER['SCRIPT_NAME'], 'web') === false ? './install.php' : '../install.php')."'> install.php 进入安装&gt;&gt; </a><br/><br/>";
-		echo "&nbsp;&nbsp;<a href='http://www.we7.cc' style='font-size:12px' target='_blank'>Power by WE7 0.7 &nbsp;微擎公众平台自助开源引擎</a>";
+		echo "&nbsp;&nbsp;<a href='http://www.we7.cc' style='font-size:12px' target='_blank'>Power by WE7 " . IMS_VERSION . " &nbsp;微擎公众平台自助开源引擎</a>";
 		exit();
 	} else {
 		header('Content-Type: text/html; charset=utf-8');
@@ -57,7 +58,8 @@ if(DEVELOPMENT) {
 } else {
 	error_reporting(0);
 }
-if(!in_array($_W['config']['setting']['cache'], array('mysql', 'file', 'memcache'))) {
+
+if(!in_array($_W['config']['setting']['cache'], array('mysql', 'memcache', 'redis'))) {
 	$_W['config']['setting']['cache'] = 'mysql';
 }
 load()->func('cache');
@@ -75,8 +77,8 @@ if (isset($_W['config']['setting']['https'])) {
 } else {
 	$_W['ishttps'] = $_SERVER['SERVER_PORT'] == 443 || 
 					(isset($_SERVER['HTTPS']) && strtolower($_SERVER['HTTPS']) != 'off') ||
-					strtolower($_SERVER['HTTP_X_FORWARDED_PROTO']) == 'https'
-					? true : false;
+					strtolower($_SERVER['HTTP_X_FORWARDED_PROTO']) == 'https' ||
+					strtolower($_SERVER['HTTP_X_CLIENT_SCHEME']) == 'https' 					? true : false;
 }
 
 $_W['isajax'] = isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest';
@@ -128,13 +130,13 @@ if (empty($_W['setting']['upload'])) {
 }
 $_W['attachurl'] = $_W['attachurl_local'] = $_W['siteroot'] . $_W['config']['upload']['attachdir'] . '/';
 if (!empty($_W['setting']['remote']['type'])) {
-	if ($_W['setting']['remote']['type'] == 1) {
+	if ($_W['setting']['remote']['type'] == ATTACH_FTP) {
 		$_W['attachurl'] = $_W['attachurl_remote'] = $_W['setting']['remote']['ftp']['url'] . '/';
-	} elseif ($_W['setting']['remote']['type'] == 2) {
+	} elseif ($_W['setting']['remote']['type'] == ATTACH_OSS) {
 		$_W['attachurl'] = $_W['attachurl_remote'] = $_W['setting']['remote']['alioss']['url'].'/';
-	} elseif ($_W['setting']['remote']['type'] == 3) {
+	} elseif ($_W['setting']['remote']['type'] == ATTACH_QINIU) {
 		$_W['attachurl'] = $_W['attachurl_remote'] = $_W['setting']['remote']['qiniu']['url'].'/';
-	} elseif ($_W['setting']['remote']['type'] == 4) {
+	} elseif ($_W['setting']['remote']['type'] == ATTACH_COS) {
 		$_W['attachurl'] = $_W['attachurl_remote'] = $_W['setting']['remote']['cos']['url'].'/';
 	}
 }

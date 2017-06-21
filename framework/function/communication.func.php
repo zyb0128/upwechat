@@ -8,6 +8,9 @@ defined('IN_IA') or exit('Access Denied');
 
 function ihttp_request($url, $post = '', $extra = array(), $timeout = 60) {
 	$urlset = parse_url($url);
+	if (empty($urlset['scheme']) || !in_array($urlset['scheme'], array('http', 'https'))) {
+		return error(1, '只能使用 http 及 https 协议');
+	}
 	if (empty($urlset['path'])) {
 		$urlset['path'] = '/';
 	}
@@ -18,7 +21,7 @@ function ihttp_request($url, $post = '', $extra = array(), $timeout = 60) {
 			}
 	if (strexists($url, 'https://') && !extension_loaded('openssl')) {
 		if (!extension_loaded("openssl")) {
-			message('请开启您PHP环境的openssl');
+			itoast('请开启您PHP环境的openssl', '', '');
 		}
 	}
 	if (function_exists('curl_init') && function_exists('curl_exec')) {
@@ -37,8 +40,8 @@ function ihttp_request($url, $post = '', $extra = array(), $timeout = 60) {
 			if (is_array($post)) {
 				$filepost = false;
 								foreach ($post as $name => &$value) {
-					if (version_compare(phpversion(), '5.6') >= 0 && substr($value, 0, 1) == '@') {
-						$value = new CURLFile(ltrim($value, '@'));
+					if (version_compare(phpversion(), '5.5') >= 0 && is_string($value) && substr($value, 0, 1) == '@') {
+						$post[$name] = new CURLFile(ltrim($value, '@'));
 					}
 					if ((is_string($value) && substr($value, 0, 1) == '@') || (class_exists('CURLFile') && $value instanceof CURLFile)) {
 						$filepost = true;

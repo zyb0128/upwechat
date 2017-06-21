@@ -5,7 +5,7 @@
  */
 defined('IN_IA') or exit('Access Denied');
 
-$_W['setting']['authmode'] = empty($_W['setting']['authmode']) ? 1 : $_W['setting']['authmode'];
+$_W['setting']['authmode'] = 1;
 unset($_SESSION['uid']);
 if($_GPC['__auth']) {
 	$auth = @json_decode(base64_decode($_GPC['__auth']), true);
@@ -56,7 +56,7 @@ if($_GPC['__auth']) {
 									$record['avatar'] = rtrim($userinfo['headimgurl'], '0') . 132;
 								}
 								if(!empty($record)) {
-									pdo_update('mc_members', $record, array('uid' => intval($user['uid'])));
+									mc_update($user['uid'], $record);
 								}
 							}
 						}

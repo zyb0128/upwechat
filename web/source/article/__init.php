@@ -4,4 +4,5 @@
  * WeEngine is NOT a free software, it under the license terms, visited http://www.we7.cc/ for more details.
  */
 
-define('IN_GW', true);
+defined('IN_IA') or exit('Access Denied');
+define('FRAME', 'system');

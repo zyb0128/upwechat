@@ -185,7 +185,7 @@ function tpl_app_form_field_district($name, $values = array()) {
 					.next().val(item[0].text)
 					.next().val(item[1].text)
 					.next().val(item[2].text);
-				});
+				}, {province : "' . $values['province'] . '", city : "' . $values['city'] . '", district : "' . $values['district'] . '"});
 			});
 		</script>';
 	return $html;

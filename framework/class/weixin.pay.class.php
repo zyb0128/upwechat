@@ -184,6 +184,7 @@ class WeiXinPay extends pay{
 		}
 		$uniontid = $params['uniontid'];
 		unset($params['uniontid']);
+
 		$params['appid'] = $this->wxpay['appid'];
 		$params['mch_id'] = $this->wxpay['mch_id'];
 		$params['spbill_create_ip'] = CLIENT_IP;

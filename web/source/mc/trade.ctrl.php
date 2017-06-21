@@ -9,9 +9,6 @@ load()->model('mc');
 load()->model('card');
 load()->model('module');
 
-if($_W['role'] != 'clerk') {
-	uni_user_permission_check('mc_member');
-}
 $_W['page']['title'] = '会员交易-会员管理';
 $dos = array('consume', 'user', 'modal', 'credit', 'card', 'cardsn', 'tpl', 'cardconsume');
 $do = in_array($do, $dos) ? $do : 'tpl';
@@ -298,7 +295,7 @@ if($do == 'card') {
 	$length = strlen($matchs[1]);
 	$pos = strpos($card['format'], '#');
 	$cardsn = str_replace($matchs[1], str_pad($card['snpos']++, $length - strlen($number), '0', STR_PAD_LEFT), $cardsn);
-	
+
 	$record = array(
 		'uniacid' => $_W['uniacid'],
 		'openid' => '',

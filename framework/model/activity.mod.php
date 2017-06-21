@@ -427,6 +427,8 @@ function activity_goods_grant($uid, $exid){
 }
 
 
+
+
 function activity_exchange_info($exchangeid, $uniacid = 0){
 	global $_W;
 	$uniacid = intval($uniacid) ? intval($uniacid) : $_W['uniacid'];
@@ -624,7 +626,6 @@ function activity_coupon_sync() {
 	cache_write($cachekey, array('expire' => time() + 1800));
 	return true;
 }
-
 function activity_coupon_download($card_list) {
 	global $_W;
 	$coupon_api = new coupon($_W['acid']);
@@ -697,7 +698,6 @@ function activity_coupon_download($card_list) {
 	}
 	return true;
 }
-
 
 function activity_store_sync() {
 	global $_W;

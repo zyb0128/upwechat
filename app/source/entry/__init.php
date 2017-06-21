@@ -4,7 +4,12 @@
  * WeEngine is NOT a free software, it under the license terms, visited http://www.we7.cc/ for more details.
  */
 defined('IN_IA') or exit('Access Denied');
+
 load()->model('module');
+
+if (empty($action)) {
+	$action = 'site';
+}
 
 $eid = intval($_GPC['eid']);
 if(!empty($eid)) {
@@ -14,7 +19,7 @@ if(!empty($eid)) {
 		'module' => $_GPC['m'],
 		'do' => $_GPC['do'],
 		'state' => $_GPC['state'],
-		'direct' => 0
+		'direct' => 0,
 	);
 }
 $moduels = uni_modules();
@@ -30,11 +35,5 @@ $_GPC['state'] = $entry['state'];
 $_GPC['m'] = $entry['module'];
 $_GPC['do'] = $entry['do'];
 
-define('IN_MODULE', $entry['module']);
 $_W['current_module'] = $moduels[$entry['module']];
-$site = WeUtility::createModuleSite($entry['module']);
-if(!is_error($site)) {
-	$method = 'doMobile' . ucfirst($entry['do']);
-	exit($site->$method());
-}
-exit();
+define('IN_MODULE', $entry['module']);

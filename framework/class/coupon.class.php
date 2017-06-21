@@ -255,8 +255,7 @@ class coupon extends WeiXinAccount {
 		$we7_coupon_module = module_fetch('we7_coupon');
 		$setting = array();
 		if (!empty($we7_coupon_module)) {
-			$cachekey = "modulesetting:{$_W['uniacid']}:we7_coupon";
-			$setting = (array)cache_load($cachekey, true);
+			$setting = $we7_coupon_module['config'];
 		} else {
 			$setting = uni_setting($_W['uniacid'], array('coupon_type'));
 		}
@@ -304,7 +303,31 @@ class coupon extends WeiXinAccount {
 		return $result;
 	}
 
-	
+		public function setActivateUserForm($card_id) {
+		global $_W;
+		$token = $this->getAccessToken();
+		if (is_error($token)) {
+			return $token;
+		}
+		$data['required_form']['common_field_id_list'] = array('USER_FORM_INFO_FLAG_MOBILE');
+		$data['card_id'] = $card_id;
+		$data['bind_old_card'] = array('name' => '绑定老会员卡', 'url' => 'www.weixin.qq.com');
+		$url = "https://api.weixin.qq.com/card/membercard/activateuserform/set?access_token={$token}";
+		load()->func('communication');
+		$result = $this->requestApi($url, json_encode($data));
+		return $result;
+	}
+		public function activateMemberCard($data) {
+		global $_W;
+		$token = $this->getAccessToken();
+		if (is_error($token)) {
+			return $token;
+		}
+		$url = "https://api.weixin.qq.com/card/membercard/activate?access_token={$token}";
+		load()->func('communication');
+		$result = $this->requestApi($url, json_encode($data));
+		return $result;
+	}
 	
 	public function ModifyStockCard($card_id, $num) {
 		$data['card_id'] = trim($card_id);
@@ -476,6 +499,36 @@ class coupon extends WeiXinAccount {
 		return $result['card'];
 	}
 
+	public function updateMemberCard($post) {
+		$token = $this->getAccessToken();
+		if (is_error($token)) {
+			return $token;
+		}
+		$url = "https://api.weixin.qq.com/card/update?access_token={$token}";
+		$result = $this->requestApi($url, urldecode(json_encode($post)));
+		return $result;
+	}
+	
+		public function batchgetCard($data) {
+		$token = $this->getAccessToken();
+		if (is_error($token)) {
+			return $token;
+		}
+		$url = "https://api.weixin.qq.com/card/batchget?access_token={$token}";
+		load()->func('communication');
+		$response = ihttp_request($url, json_encode($data));
+		if(is_error($response)) {
+			return error(-1, "访问公众平台接口失败, 错误: {$response['message']}");
+		}
+		$result = @json_decode($response['content'], true);
+		if(empty($result)) {
+			return error(-1, "接口调用失败, 元数据: {$response['meta']}");
+		} elseif(!empty($result['errcode'])) {
+			return error(-1, "访问微信接口错误, 错误代码: {$result['errcode']}, 错误信息: {$result['errmsg']},错误详情：{$this->error_code($result['errcode'])}");
+		}
+		return $result;
+	}
+
 	public function updateCard($card_id) {
 		$token = $this->getAccessToken();
 		if (is_error($token)) {
@@ -534,11 +587,19 @@ class coupon extends WeiXinAccount {
 	}
 
 	
-	public function BuildCardExt($id, $openid = '') {
-		$acid = $this->account['acid'];
-		$card_id = pdo_fetchcolumn('SELECT card_id FROM ' . tablename('coupon') . ' WHERE acid = :acid AND id = :id', array(':acid' => $acid, ':id' => $id));
-		if(empty($card_id)) {
-			return error(-1, '卡券id不合法');
+	public function BuildCardExt($id, $openid = '', $type = 'coupon') {
+		global $_W;
+		if ($type == 'membercard') {
+			$card_id = pdo_getcolumn('mc_card', array('uniacid' => $_W['uniacid']), 'card_id');
+		} else  {
+			$acid = $this->account['acid'];
+			$card_id = pdo_fetchcolumn('SELECT card_id FROM ' . tablename('coupon') . ' WHERE acid = :acid AND id = :id', array(':acid' => $acid, ':id' => $id));
+			if(empty($card_id)) {
+				return error(-1, '卡券id不合法');
+			}
+		}
+		if (empty($card_id)) {
+			$card_id = $id;
 		}
 		$time = TIMESTAMP;
 		$sign = array($card_id, $time);
@@ -733,10 +794,10 @@ class Card {
 	public $custom_url = '';
 	public $center_title = ''; 	public $center_sub_title = '';
 	public $center_url = '';
-	
+	public $need_push_on_view = false;	public $pay_info = array();
 	private $types = array('', 'DISCOUNT', 'CASH', 'GROUPON', 'GIFT', 'GENERAL_COUPON', "MEMBER_CARD", "SCENIC_TICKET", "MOVIE_TICKET");
 	private $code_types = array(COUPON_CODE_TYPE_TEXT => 'CODE_TYPE_TEXT', COUPON_CODE_TYPE_QRCODE => 'CODE_TYPE_QRCODE',COUPON_CODE_TYPE_BARCODE => 'CODE_TYPE_BARCODE');
-	
+
 	static public function create($type) {
 		$card_class = array(
 			COUPON_TYPE_DISCOUNT => 'Discount',
@@ -744,6 +805,7 @@ class Card {
 			COUPON_TYPE_GENERAL => 'General',
 			COUPON_TYPE_GIFT => 'Gift',
 			COUPON_TYPE_GROUPON => 'Groupon',
+			COUPON_TYPE_MEMBER => 'Member'
 		);
 		if (empty($card_class[$type])) {
 			return error(-1, '卡券类型错误');
@@ -753,7 +815,7 @@ class Card {
 		$card->type = $type;
 		return $card;
 	}
-	
+
 	public function setDateinfoRange($starttime, $endtime) {
 		$this->date_info = array(
 			'type' => 'DATE_TYPE_FIX_TIME_RANGE',			'begin_timestamp' => strtotime($starttime),
@@ -769,19 +831,19 @@ class Card {
 		);
 		return true;
 	}
-	
+
 	public function setCodetype($type) {
 		$this->code_type = $this->code_types[$type];
 		return true;
 	}
-	
+
 	public function setLocation($location) {
 		$store = pdo_getall('activity_stores', array('id' => $location), array('location_id'), 'location_id');
 		if (!empty($store)) {
 			$this->location_id_list = array_keys($store);
 		}
 	}
-	
+
 		public function setCenterMenu($title, $subtitle, $url) {
 		$this->center_title = urlencode($title);
 		$this->center_sub_title = urlencode($subtitle);
@@ -800,11 +862,11 @@ class Card {
 		$this->promotion_url = urlencode($url);
 		return true;
 	}
-	
+
 	public function setQuantity($quantity) {
 		$this->sku = $sku = array('quantity' => intval($quantity));
 	}
-	
+
 	public function validate() {
 		if (empty($this->logo_url)) {
 			return error(7, '未设置商户logo');
@@ -823,16 +885,20 @@ class Card {
 		}
 		return true;
 	}
-	
+
 	private function getBaseinfo() {
 		$fields = array(
 			'logo_url', 'brand_name', 'code_type', 'title', 'sub_title', 'color', 'notice',
 			'service_phone', 'description', 'date_info' ,'sku', 'get_limit', 'use_custom_code',
-			'bind_openid', 'can_share', 'can_give_friend', 'location_id_list', 
+			'bind_openid', 'can_share', 'can_give_friend', 'location_id_list',
 			'center_title', 'center_sub_title','center_url',
 			'custom_url_name','custom_url','custom_url_sub_title',
 			'promotion_url_name','promotion_url', 'promotion_url_sub_title', 'source',
 		);
+		if ($this->type == 6) {
+			$fields[] = 'need_push_on_view';
+			$fields[] = 'pay_info';
+		}
 		$baseinfo = array();
 		foreach ($this as $filed => $value) {
 			if (in_array($filed, $fields)) {
@@ -841,19 +907,16 @@ class Card {
 		}
 		return $baseinfo;
 	}
-	
+
 	private function getAdvinfo() {
 		return array();
 	}
-	
+
 	function getCardData() {
 		$carddata = array(
 			'base_info' => $this->getBaseinfo(),
 					);
 		$carddata = array_merge($carddata, $this->getCardExtraData());
-		if (strtolower($this->types[$this->type]) == 'discount') {
-			$carddata['discount'] = 100 - $carddata['discount'];
-		}
 		$card = array(
 			'card' => array(
 				'card_type' => $this->types[$this->type],
@@ -862,7 +925,7 @@ class Card {
 		);
 		return $card;
 	}
-	
+
 	function getCardArray() {
 		$data = array(
 			'card_id' => $this->card_id,
@@ -888,7 +951,7 @@ class Card {
 			'promotion_url_name' => urldecode($this->promotion_url_name),
 			'promotion_url' => urldecode($this->promotion_url),
 			'promotion_url_sub_title' => urldecode($this->promotion_url_sub_title),
-			'source' => $this->source, 
+			'source' => $this->source,
 		);
 		$data['date_info'] = array(
 			'time_type' => $this->date_info['type'] == 'DATE_TYPE_FIX_TIME_RANGE' ? 1 : 2,
@@ -903,8 +966,194 @@ class Card {
 	}
 };
 
+class MemberCard extends Card {
+	public $background_pic_url = '';
+	public $supply_bonus = true;	public $bonus_rule = array(
+		'cost_money_unit' => 100,		'increase_bonus' => '',		'max_increase_bonus' => '',		'init_increase_bonus' => '',		'cost_bonus_unit' => '',		'reduce_money' => 100,		'least_money_to_use_bonus' => '',		'max_reduce_bonus' => '',	);	public $supply_balance = true;	public $prerogative = '';	public $auto_activate = false;	public $custom_field1 = array('name_type' => 'FIELD_NAME_TYPE_COUPON', 'url' => '' );
+	public $activate_url = '';	public $wx_activate = false;	public $bonus_url = '';	public $balance_url = '';	public $bonus_rules = '';	public $balance_rules = '';	public $custom_cell1 = array('name' => '账单', 'tips' => '', 'url' => 'http://06.we7.cc/app/index.php?i=76&c=mc&a=bond&do=credits&credittype=credit2&type=record&period=1&wxref=mp.weixin.qq.com#wechat_redirect');
+	public $discount = '';	public $bonus_cleared = '';	public $format_type = true;
+	public $grant_rate = '';
+	public $offset_rate = '';
+	public $offset_max = '';
+	public $fields = array();
+	public $grant = array();
+	public $discount_type = '';
+	public $nums_status = '';
+	public $nums_text = '' ;
+	public $times_status = '';
+	public $times_text = '';
+	public $params = '';
+	public $html = '';
+
+	public function GetCardArray() {
+		return array(
+			'card_id' => $this->card_id,
+			'source' => $this->source,
+			'title' => $this->title,
+			'brand_name' => $this->brand_name,
+			'format_type' => $this->format_type,
+			'color' => $this->color,
+			'background' => $this->background_pic_url,
+			'logo' => $this->logo_url,
+			'description' => $this->description,
+			'grant_rate' => $this->grant_rate,
+			'offset_rate' => $this->offset_rate,
+			'offset_max' => $this->offset_max,
+			'fields' => $this->fields,
+			'grant' => $this->grant,
+			'discount_type' => $this->discount_type,
+			'nums_status' => $this->nums_status,
+			'nums_text' => $this->nums_text,
+			'times_status' => $this->times_status,
+			'times_text' => $this->times_text,
+			'params' => $this->params,
+			'html' => $this->html,
+			'notice' => $this->notice,
+			'quantity' => $this->sku['quantity'],
+			'least_money_to_use_bonus' => $this->bonus_rule['least_money_to_use_bonus'],
+			'max_increase_bonus' => $this->bonus_rule['max_increase_bonus']
+		);
+	}
+
+	public function getMemberCardUpdateArray() {
+		$update['card_id'] = $this->card_id;
+		$card = $this->getCardData();
+		$update = array_merge($update, $card['card']);
+		unset($update['card_type']);
+		unset($update['member_card']['base_info']['source']);
+		unset($update['member_card']['base_info']['sub_title']);
+		unset($update['member_card']['base_info']['sku']);
+		unset($update['member_card']['base_info']['use_custom_code']);
+		unset($update['member_card']['base_info']['promotion_url_name']);
+		unset($update['member_card']['base_info']['promotion_url']);
+		unset($update['member_card']['base_info']['custom_url_name']);
+		unset($update['member_card']['base_info']['custom_url']);
+		unset($update['member_card']['base_info']['brand_name']);
+		unset($update['member_card']['custom_cell1']);
+		$update['member_card']['base_info']['promotion_url_name'] = urlencode('广播');
+		$update['member_card']['base_info']['custom_url_name'] = urlencode('个人消息');
+		$update['member_card']['base_info']['center_title'] = urlencode('付款');
+		$update['member_card']['base_info']['title'] = urlencode($update['member_card']['base_info']['title']);
+		$update['member_card']['base_info']['description'] = urlencode($update['member_card']['base_info']['description']);
+		$update['member_card']['prerogative'] = urlencode($update['member_card']['prerogative']);
+		return $update;
+	}
+
+	public function GetMemberCardArray() {
+		$data = $this->getcardarray();
+		return $data;
+	}
+
+	public function setBonusRule($cost_money_unit, $increase_bonus, $max_increase_bonus, $init_increase_bonus, $cost_bonus_unit, $reduce_money, $least_money_to_use_bonus, $max_reduce_bonus) {
+		$this->bonus_rule = array(
+			'cost_money_unit' => $cost_money_unit,
+			'increase_bonus' => $increase_bonus,
+			'max_increase_bonus' => $max_increase_bonus,
+			'init_increase_bonus' => $init_increase_bonus,
+			'cost_bonus_unit' => $cost_bonus_unit,
+			'reduce_money' => $reduce_money,
+			'least_money_to_use_bonus' => $least_money_to_use_bonus,
+			'max_reduce_bonus' => $max_reduce_bonus,
+		);
+		return true;
+	}
+	public function setCustomCell($name, $tips, $url) {
+		$this->custom_cell1 =  array(
+			'name' => $name,
+			'tips' => $tips,
+			'url' => $url
+		);
+		return true;
+	}
+
+	public function setCustomField($name_type, $url, $num) {
+		$array = array(
+			'name_type' => $name_type,
+			'url' => $url
+		);
+		if ($num == 1) {
+			$this->custom_field1 = $array;
+		}
+		if ($num == 2) {
+			$this->custom_field2 = $array;
+		}
+		if ($num == 3) {
+			$this->custom_field3 = $array;
+		}
+		return true;
+	}
+	public function validate() {
+		$error = parent::validate();
+		if (is_error($error) && $error['errno'] != 11) {
+			return $error;
+		}
+		if (!empty($this->supply_bonus)) {
+			if (empty($this->bonus_rule['cost_money_unit'])) {
+				return error(13, '未填写积分说明中的消费金额');
+			}
+			if (empty($this->bonus_rule['increase_bonus'])) {
+				return error(14, '未填写积分说明中的对应增加金额');
+			}
+			if (empty($this->bonus_rule['max_increase_bonus'])) {
+				return error(15, '未填写积分说明中的用户单次可获取的积分上限');
+			}
+			if (empty($this->bonus_rule['init_increase_bonus'])) {
+				return error(16, '未填写积分说明中的初始设置积分');
+			}
+			if (empty($this->bonus_rule['cost_bonus_unit'])) {
+				return error(17, '未填写积分说明中的每次使用积分');
+			}
+			if (empty($this->bonus_rule['reduce_money'])) {
+				return error(18, '未填写积分说明中的会员卡可抵扣多少元');
+			}
+			if (empty($this->bonus_rule['least_money_to_use_bonus'])) {
+				return error(19, '未填写积分说明中的满xx元可用');
+			}
+			if (empty($this->bonus_rule['max_reduce_bonus'])) {
+				return error(20, '未填写积分说明中的单笔最多使用xx积分');
+			}
+		}
+		if (!empty($this->custom_cell1['name']) || !empty($this->custom_cell1['tips']) || !empty($this->custom_cell1['url'])) {
+			if (empty($this->custom_cell1['name'])) {
+				return error(21, '未填写入口名称');
+			}
+			if (empty($this->custom_cell1['url'])) {
+				return error(23, '未填写入口跳转链接');
+			}
+		}
+		if (empty($this->prerogative)) {
+			return error(24, '未填写会员卡特权说明');
+		}
+		if (empty($this->wx_activate) && empty($this->activate_url)) {
+			return error(25, '未填写激活会员卡url');
+		}
+		return true;
+	}
+	public function getCardExtraData() {
+		return array(
+			'background_pic_url' => $this->background_pic_url,
+			'supply_bonus' => $this->supply_bonus,
+			'bonus_rule' => $this->bonus_rule,
+			'supply_balance' => $this->supply_balance,
+			'prerogative' => $this->prerogative,
+			'auto_activate' => $this->auto_activate,
+			'custom_field1' => $this->custom_field1,
+			'activate_url' => $this->activate_url,
+			'wx_activate' => $this->wx_activate,
+			'bonus_url' => $this->bonus_url,
+			'balance_url' => $this->balance_url,
+			'bonus_rules' => $this->bonus_rules,
+			'balance_rules' => $this->balance_rules,
+			'custom_cell1' => $this->custom_cell1,
+			'discount' => $this->discount,
+			'bonus_cleared' => $this->bonus_cleared,
+		);
+	}
+}
+
+
 class DiscountCard extends Card {
-	public $discount = 0; 	
+	public $discount = 0; 
 	public function validate() {
 		$error = parent::validate();
 		if (is_error($error)) {
@@ -915,7 +1164,7 @@ class DiscountCard extends Card {
 		}
 		return true;
 	}
-	
+
 	public function getCardExtraData() {
 		return array(
 			'discount' => $this->discount,
@@ -924,7 +1173,7 @@ class DiscountCard extends Card {
 }
 
 class CashCard extends Card {
-	public $least_cost = 0; 	public $reduce_cost = 0; 	
+	public $least_cost = 0; 	public $reduce_cost = 0; 
 	public function validate() {
 		$error = parent::validate();
 		if (is_error($error)) {
@@ -938,7 +1187,7 @@ class CashCard extends Card {
 		}
 		return true;
 	}
-	
+
 	public function getCardExtraData() {
 		return array(
 			'least_cost' => $this->least_cost,
@@ -948,7 +1197,7 @@ class CashCard extends Card {
 }
 
 class GiftCard extends Card {
-	public $gift = ''; 	
+	public $gift = ''; 
 	public function validate() {
 		$error = parent::validate();
 		if (is_error($error)) {
@@ -959,7 +1208,7 @@ class GiftCard extends Card {
 		}
 		return true;
 	}
-	
+
 	public function getCardExtraData() {
 		return array(
 			'gift' => $this->gift,
@@ -978,7 +1227,7 @@ class GrouponCard extends Card {
 		}
 		return true;
 	}
-	
+
 	public function getCardExtraData() {
 		return array(
 			'deal_detail' => $this->deal_detail,
@@ -997,7 +1246,7 @@ class GeneralCard extends Card {
 		}
 		return true;
 	}
-	
+
 	public function getCardExtraData() {
 		return array(
 			'default_detail' => $this->default_detail,

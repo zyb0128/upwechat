@@ -129,9 +129,20 @@ if($do == 'down') {
 						$items = $data['content']['news_item'];
 			if(!empty($items)) {
 				foreach($items as $item) {
-					$item['attach_id'] = $insert_id;
-					$item['uniacid'] = $_W['uniacid'];
-					pdo_insert('wechat_news', $item);
+					$wechat_news = array(
+						'title' => $item['title'],
+						'author' => $item['author'],
+						'digest' => $item['digest'],
+						'content' => $item['content'],
+						'content_source_url' => $item['content_source_url'],
+						'thumb_media_id' => $item['thumb_media_id'],
+						'show_cover_pic' => $item['show_cover_pic'],
+						'url' => $item['url'],
+						'thumb_url' => $item['thumb_url'],
+						'attach_id' => $insert_id,
+						'uniacid' => $_W['uniacid'],
+					);
+					pdo_insert('wechat_news', $wechat_news);
 				}
 			}
 			$has[] = $insert_id;

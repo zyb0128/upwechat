@@ -24,7 +24,7 @@
 		</div>
 	</div>
 	<ul class="mui-table-view mui-grid-view mui-grid-9 store-nav">
-		{if $_W['user']['clerk_type'] == 2 || ($_W['user']['clerk_type'] == 3 && in_array('coupon_consume', $user_permission))}
+		{if $_W['user']['clerk_type'] == 2 || $_W['user']['clerk_type'] == 3}
 		<li class="mui-table-view-cell mui-media mui-col-xs-4">
 			<a href="{php echo $this->createMobileUrl('clerk', array('op' => 'cardconsume'));}">
 				<span class="mui-icon mui-img-circle mui-image"><img src="./resource/images/icon-verification.png" alt="" /></span>
@@ -71,4 +71,3 @@
 		});
 	});
 </script>
-{template 'common/footer'}

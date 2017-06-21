@@ -29,7 +29,8 @@ if(empty($id)) {
 	$id = intval($_GPC['id']);
 }
 if (!empty($id)) {
-	$_W['account'] = account_fetch($id);
+	$uniacid = pdo_getcolumn('account', array('acid' => $id), 'uniacid');
+	$_W['account'] = uni_fetch($uniacid);
 }
 if(empty($_W['account'])) {
 	exit('initial error hash or id');
@@ -82,6 +83,7 @@ class WeEngine {
 		$this->modules = array_keys($_W['modules']);
 		$this->modules[] = 'cover';
 		$this->modules[] = 'default';
+		$this->modules[] = 'reply';
 		$this->modules = array_unique($this->modules);
 	}
 
@@ -350,9 +352,7 @@ class WeEngine {
 					}
 				}
 				if(!empty($rec)){
-					pdo_update('mc_mapping_fans', $rec, array(
-						'openid' => $message['from'],
-					));
+					pdo_update('mc_mapping_fans', $rec, array('openid' => $message['from']));
 				}
 			}
 		} else {
@@ -454,6 +454,20 @@ class WeEngine {
 					@$obj->receive();
 				}
 			}
+		} elseif (!empty($subscribe['user_del_card']) && $this->message['event'] == 'user_del_card') {
+			foreach($subscribe['user_del_card'] as $modulename) {
+				$obj = WeUtility::createModuleReceiver($modulename);
+				$obj->message = $this->message;
+				$obj->params = $par;
+				$obj->response = $response;
+				$obj->keyword = $keyword;
+				$obj->module = $modules[$modulename];
+				$obj->uniacid = $_W['uniacid'];
+				$obj->acid = $_W['acid'];
+				if(method_exists($obj, 'receive')) {
+					@$obj->receive();
+				}
+			}
 		} else {
 			$modules = $subscribe[$this->message['type']];
 			if (!empty($modules)) {
@@ -510,7 +524,6 @@ class WeEngine {
 		} else {
 			$params += $this->handler($message['type']);
 		}
-
 		return $params;
 	}
 	
@@ -598,7 +611,11 @@ class WeEngine {
 		if(!isset($message['content'])) {
 			return $pars;
 		}
-		
+				$cachekey = 'we7:' . $_W['uniacid'] . ':keyword:' . md5($message['content']);
+		$keyword_cache = cache_load($cachekey);
+		if (!empty($keyword_cache) && $keyword_cache['expire'] > TIMESTAMP) {
+			return $keyword_cache['data'];
+		}
 		$condition = <<<EOF
 `uniacid` IN ( 0, {$_W['uniacid']} )
 AND 
@@ -634,10 +651,16 @@ EOF;
 				'module' => $keyword['module'],
 				'rule' => $keyword['rid'],
 				'priority' => $keyword['displayorder'],
-				'keyword' => $keyword
+				'keyword' => $keyword,
+				'reply_type' => $keyword['reply_type']
 			);
 			$pars[] = $params;
 		}
+		$cache = array(
+			'data' => $pars,
+			'expire' => TIMESTAMP + 5 * 60,
+		);
+		cache_write($cachekey, $cache);
 		return $pars;
 	}
 	
@@ -790,12 +813,16 @@ EOF;
 						$card_id = trim($message['cardid']);
 			$openid = trim($message['fromusername']);
 			$code = trim($message['usercardcode']);
-			pdo_update('coupon_record', array('status' => 4), array('acid' => $_W['acid'], 'card_id' => $card_id, 'openid' => $openid, 'code' => $code));
+			pdo_update('coupon_record', array('status' => 4), array('card_id' => $card_id, 'openid' => $openid, 'code' => $code));
+			$this->receive();
 		} elseif ($message['event'] == 'user_consume_card') {
 						$card_id = trim($message['cardid']);
 			$openid = trim($message['fromusername']);
 			$code = trim($message['usercardcode']);
-			pdo_update('coupon_record', array('status' => 3), array('acid' => $_W['acid'], 'card_id' => $card_id, 'openid' => $openid, 'code' => $code));
+			if (!empty($message['locationid'])) {
+				$stores_info = pdo_get('activity_stores', array('location_id' => $message['locationid']), array('id'));
+			}
+			pdo_update('coupon_record', array('status' => 3, 'usetime' => TIMESTAMP, 'store_id' => $stores_info['id']), array('card_id' => $card_id, 'openid' => $openid, 'code' => $code));
 			$this->receive();
 		}
 				exit('success');
@@ -809,19 +836,19 @@ EOF;
 		global $_W;
 		$params = array();
 		$setting = uni_setting($_W['uniacid'], array('default_message'));
-		$df = $setting['default_message'];
-		if(is_array($df) && isset($df[$type])) {
-			if (!empty($df[$type]['type']) && $df[$type]['type'] == 'keyword') {
+		$default_message = $setting['default_message'];
+		if(is_array($default_message) && !empty($default_message[$type]['type'])) {
+			if ($default_message[$type]['type'] == 'keyword') {
 				$message = $this->message;
 				$message['type'] = 'text';
 				$message['redirection'] = true;
 				$message['source'] = $type;
-				$message['content'] = $df[$type]['keyword'];
+				$message['content'] = $default_message[$type]['keyword'];
 				return $this->analyzeText($message);
 			} else {
 				$params[] = array(
 					'message' => $this->message,
-					'module' => is_array($df[$type]) ? $df[$type]['module'] : $df[$type],
+					'module' => is_array($default_message[$type]) ? $default_message[$type]['module'] : $default_message[$type],
 					'rule' => '-1',
 				);
 				return $params;
@@ -836,10 +863,14 @@ EOF;
 		if(empty($param['module']) || !in_array($param['module'], $this->modules)) {
 			return false;
 		}
-		
-		$processor = WeUtility::createModuleProcessor($param['module']);
+		if ($param['module'] == 'reply') {
+			$processor = WeUtility::createModuleProcessor('core');
+		} else {
+			$processor = WeUtility::createModuleProcessor($param['module']);
+		}
 		$processor->message = $param['message'];
 		$processor->rule = $param['rule'];
+		$processor->reply_type = $param['reply_type'];
 		$processor->priority = intval($param['priority']);
 		$processor->inContext = $param['context'] === true;
 		$response = $processor->respond();

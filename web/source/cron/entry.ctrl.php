@@ -4,7 +4,9 @@
  * WeEngine is NOT a free software, it under the license terms, visited http://www.we7.cc/ for more details.
  */
 defined('IN_IA') or exit('Access Denied');
+
 load()->func('cron');
+
 $id = intval($_GPC['id']);
 $cron = cron_check($id);
 if(is_error($cron)) {

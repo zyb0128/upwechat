@@ -14,14 +14,14 @@ $_W['uniacid'] = intval($_GPC['uniacid']);
 $args = $_GPC['args'];
 $module_info = module_fetch($modulename);
 if (empty($module_info)) {
-	message(array(), '', 'ajax');
+	iajax(0, array());
 }
 $site = WeUtility::createModuleSite($modulename);
 if (empty($site)) {
-	message(array(), '', 'ajax');
+	iajax(0, array());
 }
 if (!method_exists($site, $callname)) {
-	message(array(), '', 'ajax');
+	iajax(0, array());
 }
 $ret = @$site->$callname($args);
-message($ret, '', 'ajax');
+iajax(0, $ret);

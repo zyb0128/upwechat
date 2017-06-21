@@ -328,6 +328,16 @@ class WeiXinAccount extends WeAccount {
 		return $this->menuCreate($menu);
 	}
 	
+	public function menuCurrentQuery() {
+		$token = $this->getAccessToken();
+		if(is_error($token)){
+			return $token;
+		}
+		$url = "https://api.weixin.qq.com/cgi-bin/get_current_selfmenu_info?access_token={$token}";
+		$result = $this->requestApi($url);
+		return $result;
+	}
+
 	public function menuQuery() {
 		$token = $this->getAccessToken();
 		if(is_error($token)){
@@ -408,7 +418,7 @@ class WeiXinAccount extends WeAccount {
 		return $result['user_info_list'];
 	}
 
-	public function fansAll() {
+	public function fansAll($startopenid = '') {
 		global $_GPC;
 		$token = $this->getAccessToken();
 		if(is_error($token)){
@@ -416,7 +426,10 @@ class WeiXinAccount extends WeAccount {
 		}
 		$url = 'https://api.weixin.qq.com/cgi-bin/user/get?access_token=' . $token;
 		if(!empty($_GPC['next_openid'])) {
-			$url .= '&next_openid=' . $_GPC['next_openid'];
+			$startopenid = $_GPC['next_openid'];
+		}
+		if (!empty($startopenid)) {
+			$url .= '&next_openid=' . $startopenid;
 		}
 		$response = ihttp_get($url);
 		if(is_error($response)) {
@@ -657,13 +670,16 @@ class WeiXinAccount extends WeAccount {
 		$url = "https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid={$this->account['key']}&secret={$this->account['secret']}";
 		$content = ihttp_get($url);
 		if(is_error($content)) {
-			message('获取微信公众号授权失败, 请稍后重试！错误详情: ' . $content['message']);
+			message('获取微信公众号授权失败, 请稍后重试！错误详情: ' . $content['message'], '', 'error');
+		}
+		if (empty($content['content'])) {
+			return error('-1', 'AccessToken获取失败，请检查appid和appsecret的值是否与微信公众平台一致！');
 		}
 		$token = @json_decode($content['content'], true);
 		if(empty($token) || !is_array($token) || empty($token['access_token']) || empty($token['expires_in'])) {
 			$errorinfo = substr($content['meta'], strpos($content['meta'], '{'));
 			$errorinfo = @json_decode($errorinfo, true);
-			message('获取微信公众号授权失败, 请稍后重试！ 公众平台返回原始数据为: 错误代码-' . $errorinfo['errcode'] . '，错误信息-' . $errorinfo['errmsg']);
+			message('获取微信公众号授权失败, 请稍后重试！ 公众平台返回原始数据为: 错误代码-' . $errorinfo['errcode'] . '，错误信息-' . $errorinfo['errmsg'], '', 'error');
 		}
 		$record = array();
 		$record['token'] = $token['access_token'];
@@ -732,7 +748,7 @@ class WeiXinAccount extends WeAccount {
 	}
 	
 	
-	public function getJssdkConfig(){
+	public function getJssdkConfig($url = ''){
 		global $_W;
 		$jsapiTicket = $this->getJsApiTicket();
 		if(is_error($jsapiTicket)){
@@ -740,7 +756,7 @@ class WeiXinAccount extends WeAccount {
 		}
 		$nonceStr = random(16);
 		$timestamp = TIMESTAMP;
-		$url = $_W['siteurl'];
+		$url = empty($url) ? $_W['siteurl'] : $url;
 		$string1 = "jsapi_ticket={$jsapiTicket}&noncestr={$nonceStr}&timestamp={$timestamp}&url={$url}";
 		$signature = sha1($string1);
 		$config = array(
@@ -1179,7 +1195,7 @@ class WeiXinAccount extends WeAccount {
 	}
 	
 	
-	public function uploadMediaFixed($path, $type = 'image') {
+	public function uploadMediaFixed($path, $type = 'images') {
 		if(empty($path)) {
 			return error(-1, '参数错误');
 		}
@@ -1196,7 +1212,39 @@ class WeiXinAccount extends WeAccount {
 		);
 		return $this->requestApi($url, $data);
 	}
+
 	
+	public function editMaterialNews($data) {
+		$token = $this->getAccessToken();
+		if(is_error($token)){
+			return $token;
+		}
+		$url = "https://api.weixin.qq.com/cgi-bin/material/update_news?access_token={$token}";
+		$response = $this->requestApi($url, stripslashes(ijson_encode($data, JSON_UNESCAPED_UNICODE)));
+		if (is_error($response)) {
+			return $response;
+		}
+		return true;
+	}
+
+	
+	public function uploadNewsThumb($thumb) {
+		$token = $this->getAccessToken();
+		if(is_error($token)){
+			return $token;
+		}
+		$data = array(
+			'media' => '@'. $thumb,
+		);
+		$url = "https://api.weixin.qq.com/cgi-bin/media/uploadimg?access_token={$token}";
+		$response = $this->requestApi($url, $data);
+		if (is_error($response)) {
+			return $response;
+		} else {
+			return $response['url'];
+		}
+	}
+
 	public function uploadVideoFixed($title, $description, $path) {
 		if(empty($path) || empty($title) || empty($description)) {
 			return error(-1, '参数错误');
@@ -1269,7 +1317,6 @@ class WeiXinAccount extends WeAccount {
 			return $token;
 		}
 		$url = "https://api.weixin.qq.com/cgi-bin/material/add_news?access_token={$token}";
-		
 		$data = stripslashes(urldecode(ijson_encode($data, JSON_UNESCAPED_UNICODE)));
 		$response = $this->requestApi($url, $data);
 		if (is_error($response)) {

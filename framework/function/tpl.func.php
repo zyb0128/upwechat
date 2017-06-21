@@ -53,7 +53,7 @@ function tpl_form_field_daterange($name, $value = array(), $time = false) {
 	if (empty($time) && !defined('TPL_INIT_DATERANGE_DATE')) {
 		$s = '
 <script type="text/javascript">
-	require(["daterangepicker"], function($){
+	require(["daterangepicker"], function(){
 		$(function(){
 			$(".daterange.daterange-date").each(function(){
 				var elm = this;
@@ -77,7 +77,7 @@ function tpl_form_field_daterange($name, $value = array(), $time = false) {
 	if (!empty($time) && !defined('TPL_INIT_DATERANGE_TIME')) {
 		$s = '
 <script type="text/javascript">
-	require(["daterangepicker"], function($){
+	require(["daterangepicker"], function(){
 		$(function(){
 			$(".daterange.daterange-time").each(function(){
 				var elm = this;
@@ -133,7 +133,7 @@ function tpl_form_field_calendar($name, $values = array()) {
 		$html .= '
 		<script type="text/javascript">
 			function handlerCalendar(elm) {
-				require(["jquery","moment"], function($, moment){
+				require(["moment"], function(moment){
 					var tpl = $(elm).parent().parent();
 					var year = tpl.find("select.tpl-year").val();
 					var month = tpl.find("select.tpl-month").val();
@@ -154,7 +154,7 @@ function tpl_form_field_calendar($name, $values = array()) {
 					}
 				});
 			}
-			require(["jquery"], function($){
+			require([""], function(){
 				$(".tpl-calendar").each(function(){
 					handlerCalendar($(this).find("select.tpl-year")[0]);
 				});
@@ -206,7 +206,7 @@ function tpl_form_field_district($name, $values = array()) {
 	if (!defined('TPL_INIT_DISTRICT')) {
 		$html .= '
 		<script type="text/javascript">
-			require(["jquery", "district"], function($, dis){
+			require(["district"], function(dis){
 				$(".tpl-district-container").each(function(){
 					var elms = {};
 					elms.province = $(this).find(".tpl-province")[0];
@@ -284,18 +284,21 @@ function tpl_form_field_category_2level($name, $parents, $children, $parentid, $
 			$html .=
 				'<div class="row row-fix tpl-category-container">
 			<div class="col-xs-12 col-sm-6 col-md-6 col-lg-6">
-				<select class="form-control tpl-category-parent" id="' . $name . '_parent" name="' . $name . '[parentid]" onchange="renderCategory(this,\'' . $name . '\')">
+				<select class="form-control tpl-category-parent we7-select" id="' . $name . '_parent" name="' . $name . '[parentid]" onchange="renderCategory(this,\'' . $name . '\')">
 					<option value="0">请选择一级分类</option>';
 			$ops = '';
-			foreach ($parents as $row) {
-				$html .= '
-					<option value="' . $row['id'] . '" ' . (($row['id'] == $parentid) ? 'selected="selected"' : '') . '>' . $row['name'] . '</option>';
+			if(!empty($parents)) {
+				foreach ($parents as $row) {
+					$html .= '
+						<option value="' . $row['id'] . '" ' . (($row['id'] == $parentid) ? 'selected="selected"' : '') . '>' . $row['name'] . '</option>';
+				}
 			}
+			
 			$html .= '
 				</select>
 			</div>
 			<div class="col-xs-12 col-sm-6 col-md-6 col-lg-6">
-				<select class="form-control tpl-category-child" id="' . $name . '_child" name="' . $name . '[childid]">
+				<select class="form-control tpl-category-child we7-select" id="' . $name . '_child" name="' . $name . '[childid]">
 					<option value="0">请选择二级分类</option>';
 			if (!empty($parentid) && !empty($children[$parentid])) {
 				foreach ($children[$parentid] as $row) {

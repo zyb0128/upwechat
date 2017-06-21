@@ -8,6 +8,8 @@ defined('IN_IA') or exit('Access Denied');
 error_reporting(0);
 global $_W;
 load()->func('file');
+load()->func('communication');
+load()->model('account');
 $limit = array();
 $limit['temp'] = array(
 	'image' => array(
@@ -150,8 +152,7 @@ if ($do == 'upload') {
 	$pathname = $file['path'];
 	$fullname = ATTACHMENT_ROOT  . '/' . $pathname;
 
-		load()->model('account');
-	$acc = WeAccount::create($acid);
+		$acc = WeAccount::create($acid);
 	$token = $acc->getAccessToken();
 	if (is_error($token)) {
 		$result['message'] = $token['message'];
@@ -176,7 +177,6 @@ if ($do == 'upload') {
 		);
 		$type = 'image';
 	}
-	load()->func('communication');
 	$resp = ihttp_request($sendapi, $data);
 	if(is_error($resp)) {
 		$result['error'] = 0;
@@ -284,7 +284,7 @@ if ($do == 'browser') {
 	}
 	$page = intval($_GPC['page']);
 	$page = max(1, $page);
-	$size = intval($_GPC['psize']) ? intval($_GPC['psize']) : 32;
+	$size = intval($_GPC['psize']) ? intval($_GPC['psize']) : 10;
 	$sql = 'SELECT * FROM '.tablename('wechat_attachment')."{$condition} ORDER BY id DESC LIMIT ".(($page-1) * $size).','.$size;
 	$list = pdo_fetchall($sql, $param, 'id');
 	foreach ($list as &$item) {
@@ -296,7 +296,7 @@ if ($do == 'browser') {
 		unset($item['uid']);
 	}
 	$total = pdo_fetchcolumn('SELECT count(*) FROM '.tablename('wechat_attachment') . $condition, $param);
-	message(array('page'=> pagination($total, $page, $size, '', array('before' => '2', 'after' => '3', 'ajaxcallback'=>'null')), 'items' => $list), '', 'ajax');
+	iajax(0, array('page'=> pagination($total, $page, $size, '', array('before' => '2', 'after' => '3', 'ajaxcallback'=>'null')), 'items' => $list));
 }
 
 if ($do == 'delete') {
@@ -308,7 +308,6 @@ if ($do == 'delete') {
 		$result['message'] = '素材不存在';
 		die(json_encode($result));
 	}
-	load()->model('account');
 	$acc = WeAccount::create($acid);
 	$token = $acc->getAccessToken();
 	if (is_error($token)) {
@@ -320,7 +319,6 @@ if ($do == 'delete') {
 	$post = array(
 		'media_id' => $data['media_id']
 	);
-	load()->func('communication');
 	$resp = ihttp_request($sendapi, json_encode($post));
 	if(is_error($resp)) {
 		$result['error'] = 0;
@@ -330,7 +328,7 @@ if ($do == 'delete') {
 	$content = @json_decode($resp['content'], true);
 	if(empty($content)) {
 		$result['error'] = 0;
-		$result['message'] = "接口调用失败, 元数据: {$response['meta']}";
+		$result['message'] = "接口调用失败, 元数据: {$resp['meta']}";
 		die(json_encode($result));
 	}
 	if(!empty($content['errcode'])) {

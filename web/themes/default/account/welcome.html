@@ -1,8 +1,11 @@
 {template 'common/header-base'}
+<link rel="stylesheet" href="./resource/css/welcome.css">
 <div class="home">
 	<div class="content clearfix">
 		<div id="head">
-			<div class="logo" {if !empty($copyright['flogo'])}style="background:url('{php echo tomedia($copyright['flogo']);}') no-repeat;"{/if}></div>
+			<div class="logo">
+				<img src="{if !empty($_W['setting']['copyright']['flogo'])}{php echo tomedia($_W['setting']['copyright']['flogo'])}{else}./resource/images/logo/logo-219.png{/if}" width="220px" height="50px">
+			</div>
 			<div class="advertisement">
 				{if !empty($copyright['notice'])}
 					{$copyright['notice']}
@@ -221,7 +224,6 @@
 </div>
 <script type="text/javascript" src="http://api.map.baidu.com/api?v=1.4"></script>
 <script>
-	require(['bootstrap']);
 	var bmap = {
 		'option' : {
 			'lock' : false,

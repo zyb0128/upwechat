@@ -7,6 +7,8 @@
  */
 defined('IN_IA') or exit('Access Denied');
 
+include "model/activity.mod.php";
+
 class We7_couponModuleSite extends WeModuleSite {
 
 	public $settings;
@@ -53,7 +55,6 @@ class We7_couponModuleSite extends WeModuleSite {
 		load()->model('mc');
 		load()->model('activity');
 		activity_coupon_type_init();
-		uni_user_permission_check('mc_card_editor');
 		$op = !empty($_GPC['op']) ? $_GPC['op'] : 'editor';
 		$unisetting = uni_setting_load('creditnames');
 		if (empty($unisetting['creditnames'])) {
@@ -149,7 +150,7 @@ class We7_couponModuleSite extends WeModuleSite {
 					'nums_text' => trim($nums['nums_text']),
 					'times_status' => intval($times['times_status']),
 					'times_text' => trim($times['times_text']),
-					'params' => json_encode($params),
+					'params' => stripslashes(ijson_encode($params, JSON_UNESCAPED_UNICODE)),
 					'html' => $html
 				);
 				$grant = iunserializer($update['grant']);
@@ -295,7 +296,6 @@ class We7_couponModuleSite extends WeModuleSite {
 		global $_GPC, $_W;
 		$op = !empty($_GPC['op']) ? $_GPC['op'] : 'display';
 		$setting = $this->settings;
-		uni_user_permission_check('mc_card_manage');
 		if ($op == 'display') {
 			$cardid = intval($_GPC['cardid']);
 			if ($_W['ispost']) {
@@ -541,6 +541,7 @@ class We7_couponModuleSite extends WeModuleSite {
 
 	public function doWebCouponmanage() {
 		global $_W, $_GPC;
+		load()->classs('coupon');
 		$coupon_api = new coupon();
 		$_W['page']['title'] = '卡券管理 - 粉丝营销';
 		$op = !empty($_GPC['op']) ? $_GPC['op'] : 'display';
@@ -883,7 +884,6 @@ class We7_couponModuleSite extends WeModuleSite {
 		}
 
 		if ($op == 'delete') {
-			$coupon_api = new coupon();
 			$id = intval($_GPC['id']);
 			$row = pdo_get('coupon', array('uniacid' => $_W['uniacid'], 'id' => $id));
 			if (empty($row)) {
@@ -915,20 +915,28 @@ class We7_couponModuleSite extends WeModuleSite {
 		}
 
 		if ($op == 'download') {
-			$offset = $_GPC['__input']['offset'];
+			$compare = ver_compare(IMS_VERSION, '1.0');
+			if ($compare == -1) {
+				$offset = $_GPC['__input']['offset'];
+			} else {
+				$offset = $_GPC['offset'];
+			}
 			$data = array(
 				'offset' => $offset,
 				'count' => 50
 			);
 			$card_list = $coupon_api->batchgetCard($data);
 			$card_list_total = $card_list['total_num'];
-			$card_list_total = 100;
 			$download_info = activity_coupon_download($card_list);
 			if (is_error($download_info)) {
 				message(error(-1, $download_info['message']), '', 'ajax');
 			} else {
-				$response['offset'] = $offset;
+				$response['offset'] = $offset + 50;
+				if ($response['offset'] > $card_list_total) {
+					$response['offset'] = $offset + 1;
+				}
 				$response['total'] = $card_list_total;
+				$response['pages'] = ceil($card_list_total / 50);
 			}
 			message(error(0, $response), '', 'ajax');
 		}
@@ -948,6 +956,7 @@ class We7_couponModuleSite extends WeModuleSite {
 	public function doWebCouponconsume() {
 		global $_W, $_GPC;
 		$op = !empty($_GPC['op']) ? $_GPC['op'] : 'display';
+		$coupon_api = new coupon();
 		if ($op == 'display') {
 			$source = (COUPON_TYPE == SYSTEM_COUPON) ? '1' : '2';
 			$clerks = pdo_getall('activity_clerks', array('uniacid' => $_W['uniacid']), array('id', 'name'), 'id');
@@ -994,7 +1003,7 @@ class We7_couponModuleSite extends WeModuleSite {
 			}
 			$pindex = max(1, intval($_GPC['page']));
 			$psize = 20;
-			$list = pdo_fetchall("SELECT a.status AS rstatus,a.id AS recid, a.*, b.* FROM ".tablename('coupon_record'). ' AS a LEFT JOIN ' . tablename('coupon') . ' AS b ON a.couponid = b.id ' . " $where AND a.code <> '' ORDER BY a.status DESC, a.couponid DESC,a.id DESC LIMIT ".($pindex - 1) * $psize.','.$psize, $params);
+			$list = pdo_fetchall("SELECT a.status AS rstatus,a.id AS recid, a.*, b.* FROM ".tablename('coupon_record'). ' AS a LEFT JOIN ' . tablename('coupon') . ' AS b ON a.couponid = b.id ' . " $where AND a.code <> '' ORDER BY a.addtime DESC, a.status DESC, a.couponid DESC,a.id DESC LIMIT ".($pindex - 1) * $psize.','.$psize, $params);
 			$total = pdo_fetchcolumn("SELECT COUNT(*) FROM ".tablename('coupon_record') . ' AS a LEFT JOIN ' . tablename('coupon') . ' AS b ON a.couponid = b.id '. $where ." AND a.code <> ''", $params);
 			if(!empty($list)) {
 				$uids = array();
@@ -1024,7 +1033,7 @@ class We7_couponModuleSite extends WeModuleSite {
 					if ($date['time_type'] == 2) {
 						$addtime = strtotime(date('Y-m-d', $row['addtime']));
 						$row['starttime'] = $addtime + $date['deadline'] * 86400;
-						$row['endtime'] = $starttime + ($date['limit'] - 1) * 86400;
+						$row['endtime'] = $addtime + ($date['limit'] - 1) * 86400;
 						$row['time'] = strtotime(date('Y-m-d'));
 					}
 				}
@@ -1098,6 +1107,7 @@ class We7_couponModuleSite extends WeModuleSite {
 		global $_W, $_GPC;
 		$op = !empty($_GPC['op']) ? $_GPC['op'] : 'display';
 		$propertys = activity_member_propertys();
+		$coupon_api = new coupon();
 		if ($op == 'checkcoupon') {
 			$coupon_id = intval($_GPC['coupon']);
 			$coupon = activity_coupon_info($coupon_id);
@@ -1116,7 +1126,7 @@ class We7_couponModuleSite extends WeModuleSite {
 				$param['start'] = strtotime($param['start']);
 				$param['end'] = strtotime($param['end']);
 			}
-			$members = activity_get_member($type, $param);
+			$members = we7_coupon_activity_get_member($type, $param);
 			message(error(0, $members['total']),'', 'ajax');
 		}
 		if($op == 'display') {
@@ -1199,14 +1209,14 @@ class We7_couponModuleSite extends WeModuleSite {
 						if ($post['members'][0] == 'group_member') {
 							$param['groupid'] = intval($_GPC['groupid']);
 						}
-						$openids = activity_get_member($post['members'][0], $param);
+						$openids = we7_coupon_activity_get_member($post['members'][0], $param);
 						$openids = $openids['members'];
 						$account_api = WeAccount::create();
 						foreach ($post['coupons'] as $coupon) {
 							$post['members'] = serialize($post['members']);
 							$post['coupons'] = serialize($post['coupons']);
 							foreach ($openids as $openid) {
-								$result = activity_coupon_grant($coupon, $openid);
+								$result = we7_coupon_activity_coupon_grant($coupon, $openid);
 								$coupon_info = activity_coupon_info($coupon);
 								$send['touser'] = $openid;
 								$send['msgtype'] = 'text';
@@ -1277,7 +1287,6 @@ class We7_couponModuleSite extends WeModuleSite {
 		global $_W, $_GPC;
 		$uni_setting = pdo_get('uni_settings', array('uniacid' => $_W['uniacid']), array('exchange_enable'));
 		$cfg = $this->module['config'];
-		uni_user_permission_check('activity_coupon_display');
 		$op = !empty($_GPC['op']) ? $_GPC['op'] : 'display';
 		if ($op == 'coupon_info') {
 			$coupon = activity_coupon_info(intval($_GPC['id']));
@@ -1375,9 +1384,6 @@ class We7_couponModuleSite extends WeModuleSite {
 	public function doWebGoodsexchange() {
 		global $_W, $_GPC;
 		$uni_setting = pdo_get('uni_settings', array('uniacid' => $_W['uniacid']), array('exchange_enable'));
-		uni_user_permission_check('activity_goods_display');
-		// $dos = array('display', 'post', 'del', 'record', 'deliver', 'receiver', 'record-del');  
-		// $do = in_array($do, $dos) ? $do : 'display';
 		$op = !empty($_GPC['op']) ? $_GPC['op'] : 'display';
 		/*获取积分类型*/
 		$creditnames = array();
@@ -1465,7 +1471,7 @@ class We7_couponModuleSite extends WeModuleSite {
 		//发货记录
 		if($op == 'deliver') {
 			$exchanges = pdo_fetchall('SELECT id, title FROM ' . tablename('activity_exchange') . ' WHERE uniacid = :uniacid ORDER BY id DESC', array(':uniacid' => $_W['uniacid']));
-			$starttime = empty($_GPC['time']['start']) ? strtotime('-1 month') : strtotime($_GPC['time']['start']);
+			$starttime = empty($_GPC['time']['start']) ? strtotime('-6 month') : strtotime($_GPC['time']['start']);
 			$endtime = empty($_GPC['time']['end']) ? TIMESTAMP : strtotime($_GPC['time']['end']) + 86399;
 			$where = " WHERE a.uniacid=:uniacid AND a.createtime >= :starttime AND a.createtime <= :endtime";
 			$params = array(
@@ -1486,7 +1492,7 @@ class We7_couponModuleSite extends WeModuleSite {
 			$psize = 20;
 			$list = pdo_fetchall("SELECT a.*, b.title,b.extra,b.thumb FROM ".tablename('activity_exchange_trades_shipping'). ' AS a LEFT JOIN ' . tablename('activity_exchange') . ' AS b ON a.exid = b.id ' . " $where ORDER BY tid DESC LIMIT ".($pindex - 1) * $psize.','.$psize, $params);
 			$total = pdo_fetchcolumn("SELECT COUNT(*) FROM ".tablename('activity_exchange_trades_shipping') . ' AS a LEFT JOIN ' . tablename('activity_exchange') . ' AS b ON a.exid = b.id '. $where , $params);
-			if (checksubmit('export')) {
+			if (checksubmit('export', true)) {
 				$header = array(
 					'title' => '标题', 'extra' => '兑换物品', 'name' => '收件人','createtime' => '兑换时间', 'mobile' => '收件人电话', 'zipcode' => '收件人邮编', 'address' => '收件地址', 'status' => '状态'
 				);
@@ -1621,7 +1627,6 @@ class We7_couponModuleSite extends WeModuleSite {
 		global $_W, $_GPC;
 		$coupon_api = new coupon();
 		$_W['page']['title'] = '商家设置-粉丝营销';
-		uni_user_permission_check('activity_store_list');
 		$op = !empty($_GPC['op']) ? $_GPC['op'] : 'display';
 		if($op == 'post') {
 			$id = intval($_GPC['id']);
@@ -1856,7 +1861,7 @@ class We7_couponModuleSite extends WeModuleSite {
 					$store_info['photo_list'] = iserializer($store_info['photo_list']);
 					$store_info['source'] = 2;
 					$storeid = $select_type == 'poi_id' ? $store_info['poi_id'] : $store_info['sid'];
-					unset($store_info['categories'], $store_info['poi_id'], $store_info['update_status'], $store_info['available_state'],$store_info['offset_type'], $store_info['type'], $store_info['sid']);
+					unset($store_info['categories'], $store_info['poi_id'], $store_info['update_status'], $store_info['available_state'],$store_info['offset_type'], $store_info['type'], $store_info['sid'], $store_info['qualification_list'], $store_info['upgrade_comment'], $store_info['upgrade_status'], $store_info['mapid']);
 					if(empty($isexist)) {
 						pdo_insert('activity_stores', $store_info);
 					} else {
@@ -1878,7 +1883,7 @@ class We7_couponModuleSite extends WeModuleSite {
 				$cachekey = "storesync:{$_W['uniacid']}";
 				$cache = cache_delete($cachekey);
 			}
-			activity_store_sync();
+			we7_coupon_activity_store_sync();
 			message(error(0, '更新门店信息成功'), $this->createWeburl('storelist'), 'ajax');
 		}
 		include $this->template('storelist');
@@ -1887,7 +1892,6 @@ class We7_couponModuleSite extends WeModuleSite {
 	public function doWebClerklist() {
 		global $_W, $_GPC;
 		$op = !empty($_GPC['op']) ? $_GPC['op'] : 'display';
-		uni_user_permission_check('activity_clerk_list');
 		if ($op == 'display') {
 			$pindex = max(1, intval($_GPC['page']));
 			$psize = 30;
@@ -2169,7 +2173,6 @@ class We7_couponModuleSite extends WeModuleSite {
 
 	public function doWebClerkdeskmenu() {
 		global $_W, $_GPC;
-		uni_user_permission_check('profile_deskmenu');
 		$_W['page']['title'] = '功能选项 - 公众号选项 - 工作台菜单设置';
 		$op = !empty($_GPC['op']) ? $_GPC['op'] : 'index';
 		if($op == 'index') {
@@ -2284,9 +2287,7 @@ class We7_couponModuleSite extends WeModuleSite {
 	public function doWebPaycenter() {
 		global $_W, $_GPC;
 		$op = !empty($_GPC['op']) ? $_GPC['op'] : 'pay';
-		uni_user_permission_check('paycenter_wxmicro_pay');
 		$_W['page']['title'] = '刷卡支付-微信收款';
-		load()->model('paycenter');
 		if($op == 'pay') {
 			if($_W['isajax']) {
 				$post = $_GPC['__input'];
@@ -2602,7 +2603,6 @@ class We7_couponModuleSite extends WeModuleSite {
 
 	public function doWebSignmanage() {
 		global $_W, $_GPC;
-		uni_user_permission_check('mc_card_other');
 		$setting = pdo_get('mc_card', array('uniacid' => $_W['uniacid']));
 		$op = trim($_GPC['op']) ? trim($_GPC['op']) : 'sign-credit';
 		if ($op == 'sign-credit') {
@@ -2663,7 +2663,6 @@ class We7_couponModuleSite extends WeModuleSite {
 
 	public function doWebNoticemanage() {
 		global $_W, $_GPC;
-		uni_user_permission_check('mc_card_other');
 		$op = trim($_GPC['op']) ? trim($_GPC['op']) : 'list';
 		if($op == 'list') {
 			$pindex = max(1, intval($_GPC['page']));
@@ -2720,7 +2719,6 @@ class We7_couponModuleSite extends WeModuleSite {
 		global $_W, $_GPC;
 		$op = trim($_GPC['op']) ? trim($_GPC['op']) : 'index';
 		load()->model('mc');
-		uni_user_permission_check('stat_credit1');
 		$_W['page']['title'] = "积分统计-会员中心";
 		$starttime = empty($_GPC['time']['start']) ? mktime(0, 0, 0, date('m') , 1, date('Y')) : strtotime($_GPC['time']['start']);
 		$endtime = empty($_GPC['time']['end']) ? TIMESTAMP : strtotime($_GPC['time']['end']) + 86399;
@@ -2909,7 +2907,6 @@ class We7_couponModuleSite extends WeModuleSite {
 		global $_W, $_GPC;
 		$op = trim($_GPC['op']) ? trim($_GPC['op']) : 'index';
 		load()->model('mc');
-		uni_user_permission_check('stat_credit2');
 		$_W['page']['title'] = "余额统计-会员中心";
 		$starttime = empty($_GPC['time']['start']) ? mktime(0, 0, 0, date('m') , 1, date('Y')) : strtotime($_GPC['time']['start']);
 		$endtime = empty($_GPC['time']['end']) ? TIMESTAMP : strtotime($_GPC['time']['end']) + 86399;
@@ -3106,7 +3103,6 @@ class We7_couponModuleSite extends WeModuleSite {
 		global $_W, $_GPC;
 		$op = trim($_GPC['op']) ? trim($_GPC['op']) : 'index';
 		load()->model('mc');
-		uni_user_permission_check('stat_cash');
 		$_W['page']['title'] = "现金统计-会员中心";
 		$starttime = empty($_GPC['time']['start']) ? mktime(0, 0, 0, date('m') , 1, date('Y')) : strtotime($_GPC['time']['start']);
 		$endtime = empty($_GPC['time']['end']) ? TIMESTAMP : strtotime($_GPC['time']['end']) + 86399;
@@ -3274,7 +3270,6 @@ class We7_couponModuleSite extends WeModuleSite {
 		global $_W, $_GPC;
 		$op = trim($_GPC['op']) ? trim($_GPC['op']) : 'index';
 		load()->model('mc');
-		uni_user_permission_check('stat_card');
 		$_W['page']['title'] = "会员卡领卡统计-会员中心";
 		$starttime = empty($_GPC['time']['start']) ? mktime(0, 0, 0, date('m') , 1, date('Y')) : strtotime($_GPC['time']['start']);
 		$endtime = empty($_GPC['time']['end']) ? TIMESTAMP : strtotime($_GPC['time']['end']) + 86399;
@@ -3454,7 +3449,7 @@ class We7_couponModuleSite extends WeModuleSite {
 			$title = '签到-会员卡';
 			$credit_set = card_credit_setting();
 			$sign_set = $credit_set['sign'];
-			$total = pdo_fetchcolumn('SELECT COUNT(*) FROM ' . tablename('mc_card_sign_record') . ' WHERE uniacid = :uniacid AND uid = :uid', array(':uniacid' => $_W['uniacid'], ':uid' => $_W['member']['uid']));
+			$total = pdo_fetchcolumn('SELECT COUNT(*) FROM ' . tablename('mc_card_sign_record') . ' WHERE uniacid = :uniacid AND uid = :uid AND addtime >= :addtime', array(':uniacid' => $_W['uniacid'], ':uid' => $_W['member']['uid'], ':addtime' => strtotime(date("Y-m-1",time()))));
 			$current_month_days = date('t', TIMESTAMP);
 			$sign_rules = array(
 				$sign_set['first_group_day'] => $sign_set['first_group_num'],
@@ -3680,7 +3675,7 @@ class We7_couponModuleSite extends WeModuleSite {
 						}
 						if (!empty($setting['grant']['coupon']) && is_array($setting['grant']['coupon'])) {
 							foreach ($setting['grant']['coupon'] as $grant_coupon) {
-								$status = activity_coupon_grant($grant_coupon['coupon'], $_W['member']['uid']);
+								$status = we7_coupon_activity_coupon_grant($grant_coupon['coupon'], $_W['member']['uid']);
 								if(!is_error($status)) {
 									$coupon_title .= ",{$grant_coupon['couponTitle']}";
 								}
@@ -3721,7 +3716,7 @@ class We7_couponModuleSite extends WeModuleSite {
 				}
 			}
 			load()->model('activity');
-			$coupons = activity_coupon_owned();
+			$coupons = we7_coupon_activity_coupon_owned();
 			$nums_recharge = iunserializer($setting['nums']);
 			$times_recharge = iunserializer($setting['times']);
 			$total = count($coupons);
@@ -3805,7 +3800,7 @@ class We7_couponModuleSite extends WeModuleSite {
 		}
 
 		/*增加次数*/
-		if($do == 'add_recharge') {
+		if($op == 'add_recharge') {
 			$type = trim($_GPC['type']);
 			$mcard = pdo_get('mc_card_members', array('uniacid' => $_W['uniacid'], 'uid' => $_W['member']['uid']));
 			$mcard['status'] = '1';
@@ -4048,8 +4043,8 @@ class We7_couponModuleSite extends WeModuleSite {
 		$colors = activity_coupon_colors();
 		$op = trim($_GPC['op']) ? trim($_GPC['op']) : 'display';
 		$activity_type = trim($_GPC['activity_type']) ? trim($_GPC['activity_type']) : 'coupon';
-		$cachekey = "modulesetting:{$_W['uniacid']}:we7_coupon";
-		$we7_coupon_settings = cache_load($cachekey);
+		$we7_coupon_info = module_fetch('we7_coupon');
+		$we7_coupon_settings = $we7_coupon_info['config'];
 		if ($activity_type == 'coupon') {
 			//兑换列表
 			if($op == 'display') {
@@ -4087,7 +4082,7 @@ class We7_couponModuleSite extends WeModuleSite {
 					}
 					if (!empty($_W['current_module'])) {
 						$coupon_modules = pdo_getall('coupon_modules', array('uniacid' => $_W['uniacid'], 'couponid' => $list['extra']), array(), 'module');
-						if (!empty($coupon_modules) && empty($coupon_modules[$_W['current_module']['name']])) {
+						if (!empty($coupon_modules) && empty($coupon_modules[$_W['current_module']['name']]) && $_W['current_module']['name'] != 'we7_coupon') {
 							unset($exchange_lists[$list['extra']]);
 							continue;
 						}
@@ -4123,7 +4118,7 @@ class We7_couponModuleSite extends WeModuleSite {
 				if ($activity_exchange['endtime'] < strtotime(date('Y-m-d'))) {
 					message(error(-1, '活动已结束'), '', 'ajax');
 				}
-				$status = activity_coupon_grant($id, $_W['member']['uid']);
+				$status = we7_coupon_activity_coupon_grant($id, $_W['member']['uid']);
 				if (is_error($status)) {
 					message(error(-1, $status['message']), '', 'ajax');
 				} else {
@@ -4146,8 +4141,8 @@ class We7_couponModuleSite extends WeModuleSite {
 			//我的代金券
 			if($op == 'mine') {
 				$title = '我的卡券';
-				activity_coupon_give();
-				$coupon_records = activity_coupon_owned();
+				we7_coupon_activity_coupon_give();
+				$coupon_records = we7_coupon_activity_coupon_owned();
 			}
 			//使用代金券
 			if($op == 'use') {
@@ -4458,8 +4453,7 @@ class We7_couponModuleSite extends WeModuleSite {
 
 	public function doMobileClerkhome() {
 		global $_W, $_GPC;
-		paycenter_check_login();
-		$user_permission = uni_user_permission('system');
+		we7_coupon_paycenter_check_login();
 		$today_revenue = $this->revenue(0);
 		$yesterday_revenue = $this->revenue(-1);
 		$seven_revenue = $this->revenue(-7);
@@ -4467,7 +4461,6 @@ class We7_couponModuleSite extends WeModuleSite {
 	}
 	public function doMobileClerkmore() {
 		global $_W, $_GPC;
-		$user_permission = uni_user_permission('system');
 		$store_name = $_W['user']['store_name'];
 		$clerk_name = $_W['user']['name'];
 		if($_GPC['do'] == 'more') {
@@ -4477,8 +4470,7 @@ class We7_couponModuleSite extends WeModuleSite {
 	}
 	public function doMobileClerkscanpay() {
 		global $_W, $_GPC;
-		paycenter_check_login();
-		$user_permission = uni_user_permission('system');
+		we7_coupon_paycenter_check_login();
 		$scan_type = trim($_GPC['scan_type']) ? trim($_GPC['scan_type']) : 'index';
 		if ($_W['account']['level'] != ACCOUNT_SERVICE_VERIFY) {
 			message('公众号权限不足', '', 'error');
@@ -4537,9 +4529,9 @@ class We7_couponModuleSite extends WeModuleSite {
 				message('订单不存在');
 			} else {
 				$store_id = $order['store_id'];
-				$types = paycenter_order_types();
-				$trade_types = paycenter_order_trade_types();
-				$status = paycenter_order_status();
+				$types = we7_coupon_paycenter_order_types();
+				$trade_types = we7_coupon_paycenter_order_trade_types();
+				$status = we7_coupon_paycenter_order_status();
 				$store_info = pdo_get('activity_stores', array('id' => $store_id), array('business_name'));
 			}
 		}
@@ -4549,7 +4541,6 @@ class We7_couponModuleSite extends WeModuleSite {
 	public function doMobileClerkcardconsume() {
 		global $_W, $_GPC;
 		load()->model('activity');
-		$user_permission = uni_user_permission('system');
 		$qrcode = trim($_GPC['code']);
 		if($_W['isajax']) {
 			$code = trim($_GPC['code']);
@@ -4691,6 +4682,9 @@ class We7_couponModuleSite extends WeModuleSite {
 
 	public function payResult($params) {
 		global $_W;
+		if ($params['type'] == 'delivery') {
+			message('请及时付款', $this->createMobileUrl('clerk', array('m' => 'we7_coupon', 'op' => 'paydetail', 'id' => $params['tid'])), 'success');
+		}
 		if($params['result'] == 'success' && $params['from'] == 'notify') {
 			$order = pdo_get('paycenter_order', array('id' => $params['tid'], 'uniacid' => $_W['uniacid']));
 			if(!empty($order)) {
@@ -4748,4 +4742,246 @@ class We7_couponModuleSite extends WeModuleSite {
 			message('支付成功！', $this->createMobileUrl('clerk', array('m' => 'we7_coupon', 'op' => 'paydetail', 'id' => $params['tid'])), 'success');
 		}
 	}
+	public function doWebWxcardreply() {
+		global $_W, $_GPC;
+		$op = !empty($_GPC['op']) ? $_GPC['op'] : 'display';
+		load()->model('reply');
+		load()->model('module');
+		if ($op == 'display') {
+			$pindex = max(1, intval($_GPC['page']));
+			$psize = 20;
+			$cids = $parentcates = $list =  array();
+			$types = array('', '等价', '包含', '正则表达式匹配', '直接接管');
+			
+			$condition = 'uniacid = :uniacid AND `module`=:module';
+			$params = array();
+			$params[':uniacid'] = $_W['uniacid'];
+			$params[':module'] = 'wxcard';
+			$status = isset($_GPC['status']) ? intval($_GPC['status']) : -1;
+			if ($status != -1){
+				$condition .= " AND status = '{$status}'";
+			}
+			if(isset($_GPC['keyword'])) {
+				$condition .= ' AND `name` LIKE :keyword';
+				$params[':keyword'] = "%{$_GPC['keyword']}%";
+			}
+			$replies = reply_search($condition, $params, $pindex, $psize, $total);
+			$pager = pagination($total, $pindex, $psize);
+			if (!empty($replies)) {
+				foreach($replies as &$item) {
+					$condition = '`rid`=:rid';
+					$params = array();
+					$params[':rid'] = $item['id'];
+					$item['keywords'] = reply_keywords_search($condition, $params);
+					$entries = module_entries('wxcard', array('rule'),$item['id']);
+					if(!empty($entries)) {
+						$item['options'] = $entries['rule'];
+					}
+				}
+			}
+		}
+		if ($op == 'post') {
+			if ($_W['isajax'] && $_W['ispost']) {
+				/*检测规则是否已经存在*/
+				$sql = 'SELECT `rid` FROM ' . tablename('rule_keyword') . " WHERE `uniacid` = :uniacid  AND `content` = :content";
+				$result = pdo_fetchall($sql, array(':uniacid' => $_W['uniacid'], ':content' => $_GPC['keyword']));
+				if (!empty($result)) {
+					$keywords = array();
+					foreach ($result as $reply) {
+						$keywords[] = $reply['rid'];
+					}
+					$rids = implode($keywords, ',');
+					$sql = 'SELECT `id`, `name` FROM ' . tablename('rule') . " WHERE `id` IN ($rids)";
+					$rules = pdo_fetchall($sql);
+					exit(@json_encode($rules));
+				}
+				exit('success');
+			}
+			$rid = intval($_GPC['rid']);
+			if(!empty($rid)) {
+				$reply = reply_single($rid);
+				if(empty($reply) || $reply['uniacid'] != $_W['uniacid']) {
+					message('抱歉，您操作的规则不在存或是已经被删除！', $this->createWebUrl('wxcardreply', array('op' => 'display')), 'error');
+				}
+				foreach($reply['keywords'] as &$kw) {
+					$kw = array_elements(array('type', 'content'), $kw);
+				}
+			}
+			if(checksubmit('submit')) {
+				if(empty($_GPC['name'])) {
+					message('必须填写回复规则名称.');
+				}
+				$keywords = @json_decode(htmlspecialchars_decode($_GPC['keywords']), true);
+				if(empty($keywords)) {
+					message('必须填写有效的触发关键字.');
+				}
+				$rule = array(
+					'uniacid' => $_W['uniacid'],
+					'name' => $_GPC['name'],
+					'module' => 'wxcard',
+					'status' => intval($_GPC['status']),
+					'displayorder' => intval($_GPC['displayorder_rule']),
+				);
+				if(!empty($_GPC['istop'])) {
+					$rule['displayorder'] = 255;
+				} else {
+					$rule['displayorder'] = range_limit($rule['displayorder'], 0, 254);
+				}
+				$module = WeUtility::createModule('wxcard');
+				
+				if(empty($module)) {
+					message('抱歉，模块不存在！');
+				}
+				$msg = $module->fieldsFormValidate();
+				
+				if(is_string($msg) && trim($msg) != '') {
+					message($msg);
+				}
+				if (!empty($rid)) {
+					$result = pdo_update('rule', $rule, array('id' => $rid));
+				} else {
+					$result = pdo_insert('rule', $rule);
+					$rid = pdo_insertid();
+				}
+				if (!empty($rid)) {
+					//更新，添加，删除关键字
+					$sql = 'DELETE FROM '. tablename('rule_keyword') . ' WHERE `rid`=:rid AND `uniacid`=:uniacid';
+					$pars = array();
+					$pars[':rid'] = $rid;
+					$pars[':uniacid'] = $_W['uniacid'];
+					pdo_query($sql, $pars);
+			
+					$rowtpl = array(
+						'rid' => $rid,
+						'uniacid' => $_W['uniacid'],
+						'module' => $rule['module'],
+						'status' => $rule['status'],
+						'displayorder' => $rule['displayorder'],
+					);
+					foreach($keywords as $kw) {
+						$krow = $rowtpl;
+						$krow['type'] = range_limit($kw['type'], 1, 4);
+						$krow['content'] = $kw['content'];
+						pdo_insert('rule_keyword', $krow);
+					}
+					$rowtpl['incontent'] = $_GPC['incontent'];
+					$module->fieldsFormSubmit($rid);
+					message('回复规则保存成功！', $this->createWebUrl('wxcardreply', array('op' => 'display', 'rid' => $rid)));
+				} else {
+					message('回复规则保存失败, 请联系网站管理员！');
+				}
+			} 
+		}
+
+		if ($op == 'delete') {
+			$rids = $_GPC['rid'];
+			if(!is_array($rids)) {
+				$rids = array($rids);
+			}
+			if(empty($rids)) {
+				message('非法访问.');
+			}
+			foreach($rids as $rid) {
+				$rid = intval($rid);
+				$reply = reply_single($rid);
+				if(empty($reply) || $reply['uniacid'] != $_W['uniacid']) {
+					message('抱歉，您操作的规则不在存或是已经被删除！', referer(), 'error');
+				}
+				//删除回复，关键字及规则
+				if (pdo_delete('rule', array('id' => $rid))) {
+					pdo_delete('rule_keyword', array('rid' => $rid));
+					//删除统计相关数据
+					pdo_delete('stat_rule', array('rid' => $rid));
+					pdo_delete('stat_keyword', array('rid' => $rid));
+					//调用模块中的删除
+					$module = WeUtility::createModule($reply['module']);
+					if (method_exists($module, 'ruleDeleted')) {
+						$module->ruleDeleted($rid);
+					}
+				}
+			}
+			message('规则操作成功！', referer(), 'success');
+		}
+
+		if ($op == 'stat-trend') {
+			$_W['page']['title'] = '关键指标详解 - 数据统计';
+			$id = intval($_GPC['id']);
+			$starttime = empty($_GPC['time']['start']) ? strtotime(date('Y-m-d')) - 7 * 86400 : strtotime($_GPC['time']['start']);
+			$endtime = empty($_GPC['time']['end']) ? TIMESTAMP : strtotime($_GPC['time']['end']) + 86399;
+			$list = pdo_fetchall("SELECT createtime, hit  FROM " . tablename('stat_rule') . " WHERE uniacid = '{$_W['uniacid']}' AND rid = :rid AND createtime >= :createtime AND createtime <= :endtime ORDER BY createtime ASC", array(':rid' => $id, ':createtime' => $starttime, ':endtime' => $endtime));
+			$day = $hit = array();
+			if (!empty($list)) {
+				foreach ($list as $row) {
+					$day[] = date('m-d', $row['createtime']);
+					$hit[] = intval($row['hit']);
+				}
+			}
+			/*添加规则默认数据*/
+			for ($i = 0; $i = count($hit) < 2; $i++) {
+				$day[] = date('m-d', $endtime);
+				$hit[] = $day[$i] == date('m-d', $endtime) ? $hit[0] : '0';
+			}
+			$list = pdo_fetchall("SELECT createtime, hit, rid, kid FROM " . tablename('stat_keyword') . " WHERE uniacid = '{$_W['uniacid']}' AND rid = :rid AND createtime >= :createtime AND createtime <= :endtime ORDER BY createtime ASC", array(':rid' => $id, ':createtime' => $starttime, ':endtime' => $endtime));
+			if (!empty($list)) {
+				foreach ($list as $row) {
+					$keywords[$row['kid']]['hit'][] = $row['hit'];
+					$keywords[$row['kid']]['day'][] = date('m-d', $row['createtime']);
+				}
+				foreach ($keywords as &$value) {
+					/*添加所属关键字默认数据*/
+					if (count($value['hit']) < 2) {
+						$value['hit'][] = $value['day'][0] == date('m-d', $endtime) ? $value['hit'][0] : '0';
+						$value['day'][] = date('m-d', $endtime);
+					}
+				}
+				$keywordnames = pdo_fetchall("SELECT content, id FROM " . tablename('rule_keyword') . " WHERE id IN (" . implode(',', array_keys($keywords)) . ")", array(), 'id');
+			}
+		}
+		include $this->template('wxcardreply');
+	}
+}
+function we7_coupon_tpl_form_field_location_category($name, $values = array(), $del = false) {
+	$html = '';
+	if (!defined('TPL_INIT_LOCATION_CATEGORY')) {
+		$html .= '
+		<script type="text/javascript" src="../addons/we7_coupon/template/style/js/location.js"></script>';
+		define('TPL_INIT_LOCATION_CATEGORY', true);
+	}
+	if (empty($values) || !is_array($values)) {
+		$values = array('cate'=>'','sub'=>'','clas'=>'');
+	}
+	if(empty($values['cate'])) {
+		$values['cate'] = '';
+	}
+	if(empty($values['sub'])) {
+		$values['sub'] = '';
+	}
+	if(empty($values['clas'])) {
+		$values['clas'] = '';
+	}
+	$html .= '
+		<div class="row row-fix tpl-location-container">
+			<div class="col-xs-12 col-sm-3 col-md-3 col-lg-3">
+				<select name="' . $name . '[cate]" data-value="' . $values['cate'] . '" class="form-control tpl-cate">
+				</select>
+			</div>
+			<div class="col-xs-12 col-sm-3 col-md-3 col-lg-3">
+				<select name="' . $name . '[sub]" data-value="' . $values['sub'] . '" class="form-control tpl-sub">
+				</select>
+			</div>
+			<div class="col-xs-12 col-sm-3 col-md-3 col-lg-3">
+				<select name="' . $name . '[clas]" data-value="' . $values['clas'] . '" class="form-control tpl-clas">
+				</select>
+			</div>';
+	if($del) {
+		$html .='
+			<div class="col-xs-12 col-sm-3 col-md-3 col-lg-3" style="padding-top:5px">
+				<a title="删除" onclick="$(this).parents(\'.tpl-location-container\').remove();return false;"><i class="fa fa-times-circle"></i></a>
+			</div>
+		</div>';
+	} else {
+		$html .= '</div>';
+	}
+
+	return $html;
 }
